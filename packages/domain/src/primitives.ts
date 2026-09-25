@@ -61,3 +61,24 @@ export function requireValidDate(value: Date, label: string): Date {
 
   return value;
 }
+
+/** A UTC calendar day, formatted `YYYY-MM-DD`. Daily caps reset when it changes. */
+export type DayBucket = string;
+
+const DAY_BUCKET_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The UTC day containing `at`. Callers pass the injected Clock's time, never wall-clock time,
+ * so debug time travel crosses day boundaries too.
+ */
+export function utcDayBucket(at: Date): DayBucket {
+  return requireValidDate(at, 'at').toISOString().slice(0, 10);
+}
+
+export function requireDayBucket(value: string, label: string): DayBucket {
+  if (!DAY_BUCKET_PATTERN.test(value) || utcDayBucket(new Date(`${value}T00:00:00.000Z`)) !== value) {
+    throw new RangeError(`${label} must be a UTC day formatted YYYY-MM-DD.`);
+  }
+
+  return value;
+}

@@ -1,3 +1,4 @@
+import type { PersonalitySignal, PersonalityTraitKey } from './personality.js';
 import type { PetActivity } from './state.js';
 
 const MINUTE_MS = 60 * 1_000;
@@ -185,4 +186,53 @@ export const DEFAULT_GAME_RULES: GameRules = Object.freeze({
     veryHappyAtLeast: 90,
     lowHappinessAtOrBelow: 35,
   }),
+});
+
+export type PersonalityTraitDeltas = Readonly<Partial<Record<PersonalityTraitKey, number>>>;
+
+/** Personality balance (Prototype 0.2 plan §12–§23). Values are hypotheses, tuned in playtests. */
+export interface PersonalityRules {
+  /** Every trait stays within this range after any mutation. */
+  readonly traitMin: number;
+  readonly traitMax: number;
+  /** New personalities start inside this narrower range, so no pet starts extreme. */
+  readonly initialMin: number;
+  readonly initialMax: number;
+  /** Maximum absolute evolution per trait per UTC day. Normalization is exempt. */
+  readonly dailyCapPerTrait: number;
+  /** Independent and Clingy partially oppose: their sum never exceeds this. */
+  readonly independentClingyMaxSum: number;
+  readonly signalDeltas: Readonly<Record<PersonalitySignal, PersonalityTraitDeltas>>;
+  /** Granted at most once per day for qualifying autonomous activity. */
+  readonly autonomousIndependentDelta: number;
+  /** A trait at or above this is dominant; it is also the HIGH bucket threshold. */
+  readonly highAtLeast: number;
+  /** A trait below this is in the LOW bucket. */
+  readonly lowBelow: number;
+  /** Independent/Clingy difference needed before one of them defines the social style. */
+  readonly socialStyleMargin: number;
+}
+
+export const DEFAULT_PERSONALITY_RULES: PersonalityRules = Object.freeze({
+  traitMin: 0.05,
+  traitMax: 0.95,
+  initialMin: 0.35,
+  initialMax: 0.55,
+  dailyCapPerTrait: 0.03,
+  independentClingyMaxSum: 1.4,
+  signalDeltas: Object.freeze({
+    PLAY: Object.freeze({ playful: 0.006 }),
+    CURIOSITY: Object.freeze({ curious: 0.004 }),
+    AFFECTION: Object.freeze({ clingy: 0.003, shy: -0.001 }),
+    PRAISE: Object.freeze({ shy: -0.002 }),
+    COMFORT: Object.freeze({ clingy: 0.002, shy: -0.001 }),
+    CARE: Object.freeze({ clingy: 0.001 }),
+    CASUAL: Object.freeze({}),
+    // No deterministic mutation in 0.2: teasing is too easy to misread (plan §17).
+    TEASING: Object.freeze({}),
+  }),
+  autonomousIndependentDelta: 0.001,
+  highAtLeast: 0.65,
+  lowBelow: 0.35,
+  socialStyleMargin: 0.1,
 });

@@ -2,6 +2,8 @@ export * from './actions.js';
 export * from './clock.js';
 export * from './config.js';
 export * from './events.js';
+export * from './personality.js';
+export * from './personality-profile.js';
 export * from './pet.js';
 export * from './primitives.js';
 export * from './random.js';

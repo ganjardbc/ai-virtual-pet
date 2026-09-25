@@ -770,6 +770,16 @@ If none qualifies:
 
 use highest trait as primary tendency but label strength moderate.
 
+`socialStyle` (frozen in Unit 01):
+
+```text
+independent − clingy ≥ +0.10   → INDEPENDENT
+independent − clingy ≤ −0.10   → CLINGY
+otherwise                      → BALANCED
+```
+
+Margin is `socialStyleMargin` in `DEFAULT_PERSONALITY_RULES`.
+
 Do not expose numeric percentages to player.
 
 ---
