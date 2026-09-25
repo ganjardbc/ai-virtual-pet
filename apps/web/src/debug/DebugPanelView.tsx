@@ -116,29 +116,33 @@ function TraitRow({
   };
 
   return (
-    <form className="debug__stat debug__trait" onSubmit={submit}>
-      <label className="debug__key" htmlFor={`debug-trait-${trait}`}>
-        {trait[0]!.toUpperCase() + trait.slice(1)}
-      </label>
-      <output className="debug__value">{formatTrait(value)}</output>
-      <output className="debug__value">
-        {formatSignedDelta(delta)} / {formatTrait(cap)}
-      </output>
-      <input
-        id={`debug-trait-${trait}`}
-        className="debug__input"
-        type="number"
-        inputMode="decimal"
-        step="0.01"
-        min={0.05}
-        max={0.95}
-        placeholder="0.05–0.95"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-      />
-      <button type="submit" className="debug__button" disabled={busy || draft.trim() === ''}>
-        Set
-      </button>
+    <form className="debug__trait" onSubmit={submit}>
+      <div className="debug__trait-info">
+        <label className="debug__trait-name" htmlFor={`debug-trait-${trait}`}>
+          {trait[0]!.toUpperCase() + trait.slice(1)}
+        </label>
+        <output className="debug__trait-value">{formatTrait(value)}</output>
+        <span className="debug__trait-delta">
+          {formatSignedDelta(delta)} / {formatTrait(cap)}
+        </span>
+      </div>
+      <div className="debug__trait-controls">
+        <input
+          id={`debug-trait-${trait}`}
+          className="debug__input debug__trait-input"
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min={0.05}
+          max={0.95}
+          placeholder="0.05–0.95"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="submit" className="debug__button" disabled={busy || draft.trim() === ''}>
+          Set
+        </button>
+      </div>
     </form>
   );
 }

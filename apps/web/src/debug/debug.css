@@ -101,9 +101,44 @@
   grid-template-columns: 90px 64px 1fr auto;
 }
 
-/* Traits add a daily delta column between the raw value and the input (Tasks 10.1–10.2). */
+/* Traits: name + value + today's delta on the left, input + Set on the right (Tasks 10.1–10.2). */
 .debug__trait {
-  grid-template-columns: 78px 56px 1fr 72px auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.debug__trait-info {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.debug__trait-name {
+  flex: 0 0 60px;
+  color: var(--debug-muted);
+}
+
+.debug__trait-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.debug__trait-delta {
+  margin-left: auto;
+  color: var(--debug-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.debug__trait-controls {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.debug__trait-input {
+  width: 68px;
 }
 
 .debug__hint {
