@@ -684,13 +684,34 @@ p {
   }
 }
 
+@keyframes recap-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 /* ---------- Recap ---------- */
 
 .recap {
+  position: fixed;
+  left: 50%;
+  /* Raised above the bottom controls row (actions/status) so it never blocks the action buttons. */
+  bottom: calc(env(safe-area-inset-bottom) + 150px);
+  z-index: 40;
+  width: min(calc(100vw - 32px), 620px);
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  transform: translateX(-50%);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--color-surface-secondary);
-  animation: fade-in var(--motion-base) var(--ease-soft);
+  animation: recap-in var(--motion-base) var(--ease-spring);
 }
 
 .recap__header {
@@ -1029,7 +1050,6 @@ body::after {
 .game__header,
 .habitat,
 .reaction,
-.recap,
 .system-message,
 .stage {
   grid-column: 1 / -1;
@@ -1669,10 +1689,8 @@ body::after {
 }
 
 .recap {
-  width: min(100%, 620px);
-  margin: 0 auto;
   border: 2px solid #18313d;
-  box-shadow: 0 4px 0 #18313d;
+  box-shadow: 0 6px 0 #18313d, 0 16px 36px rgb(2 17 24 / 28%);
 }
 
 .system-message {
@@ -1933,7 +1951,6 @@ body::after {
   .game__header,
   .habitat,
   .reaction,
-  .recap,
   .actions,
   .status,
   .system-message,
@@ -2144,6 +2161,11 @@ body::after {
   .status__row {
     min-height: 94px;
     padding-inline: 2px;
+  }
+
+  /* Actions and status stack on compact screens, so the recap clears both. */
+  .recap {
+    bottom: calc(env(safe-area-inset-bottom) + 196px);
   }
 }
 

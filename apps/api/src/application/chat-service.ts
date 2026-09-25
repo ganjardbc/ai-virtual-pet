@@ -12,7 +12,7 @@ import {
   type ChatTurnResult,
   type PetSnapshot,
 } from '@ai-virtual-pet/contracts';
-import type { Clock, PersonalitySignal } from '@ai-virtual-pet/domain';
+import type { Clock, PersonalityRules, PersonalitySignal } from '@ai-virtual-pet/domain';
 
 import { DEFAULT_AI_TIMEOUTS, type AITimeouts } from '../ai/config.js';
 import { buildCharacterContext } from '../ai/context.js';
@@ -66,6 +66,8 @@ export interface ChatServiceDependencies {
   readonly aiTimeouts?: AITimeouts;
   readonly conversationLimits?: ConversationLimits;
   readonly interpretationRules?: InterpretationRules;
+  /** Personality thresholds for the prompt profile; the same rules the pet evolves under. */
+  readonly personalityRules?: PersonalityRules;
   /** Monotonic milliseconds for the turn budget (wall time spent waiting, not game time). */
   readonly monotonicNow?: () => number;
   readonly createId?: () => string;
@@ -312,6 +314,7 @@ export class ChatService {
       personality: aggregate.personality.traits,
       messages,
       currentMessage: { id: user.id, content: user.content },
+      ...(this.deps.personalityRules ? { personalityRules: this.deps.personalityRules } : {}),
     });
   }
 }

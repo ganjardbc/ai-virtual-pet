@@ -1,15 +1,21 @@
-import type { DebugState } from '@ai-virtual-pet/contracts';
+import type { ChatAction, DebugAi, DebugSetPersonalityRequest, DebugState } from '@ai-virtual-pet/contracts';
 import { useState, type FormEvent } from 'react';
 
 import {
   ADVANCE_PRESETS,
   DEBUG_STATS,
+  formatNumber,
   formatOffset,
   formatPayload,
+  formatSignedDelta,
   formatStat,
   formatTime,
+  formatTrait,
+  PERSONALITY_PRESET_OPTIONS,
+  PERSONALITY_TRAITS,
   type AdvancePreset,
   type DebugStat,
+  type DebugTrait,
 } from './format';
 
 export type DebugViewStatus = 'loading' | 'ready' | 'no-pet' | 'disabled' | 'error';
@@ -17,6 +23,7 @@ export type DebugViewStatus = 'loading' | 'ready' | 'no-pet' | 'disabled' | 'err
 export interface DebugPanelViewProps {
   readonly status: DebugViewStatus;
   readonly state?: DebugState | undefined;
+  readonly ai?: DebugAi | undefined;
   readonly feedback: string | null;
   readonly busy: boolean;
   readonly onClose: () => void;
@@ -24,6 +31,7 @@ export interface DebugPanelViewProps {
   readonly onSleep: () => void;
   readonly onWake: () => void;
   readonly onSet: (stat: DebugStat, value: number) => void;
+  readonly onSetPersonality: (body: DebugSetPersonalityRequest) => void;
   readonly onReset: () => void;
 }
 
@@ -80,11 +88,76 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Raw trait with today's applied delta against the cap, so caps are debuggable (Tasks 10.1, 10.2). */
+function TraitRow({
+  trait,
+  value,
+  delta,
+  cap,
+  busy,
+  onSet,
+}: {
+  trait: DebugTrait;
+  value: number;
+  delta: number;
+  cap: number;
+  busy: boolean;
+  onSet: DebugPanelViewProps['onSetPersonality'];
+}) {
+  const [draft, setDraft] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const parsed = Number(draft);
+
+    if (draft.trim() !== '' && Number.isFinite(parsed)) {
+      onSet({ [trait]: parsed });
+      setDraft('');
+    }
+  };
+
+  return (
+    <form className="debug__stat debug__trait" onSubmit={submit}>
+      <label className="debug__key" htmlFor={`debug-trait-${trait}`}>
+        {trait[0]!.toUpperCase() + trait.slice(1)}
+      </label>
+      <output className="debug__value">{formatTrait(value)}</output>
+      <output className="debug__value">
+        {formatSignedDelta(delta)} / {formatTrait(cap)}
+      </output>
+      <input
+        id={`debug-trait-${trait}`}
+        className="debug__input"
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min={0.05}
+        max={0.95}
+        placeholder="0.05–0.95"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <button type="submit" className="debug__button" disabled={busy || draft.trim() === ''}>
+        Set
+      </button>
+    </form>
+  );
+}
+
+function formatAction(action: ChatAction | null): string {
+  if (!action) {
+    return '—';
+  }
+
+  return action.status === 'SUCCESS' ? `${action.type} SUCCESS` : `${action.type} REJECTED (${action.reason})`;
+}
+
 /** Dense, tool-like presentation of raw state (design system §44). Separate from Player Mode. */
 export function DebugPanelView(props: DebugPanelViewProps) {
   const { status, state, feedback, busy } = props;
   const [confirmingReset, setConfirmingReset] = useState(false);
   const pet = state?.pet;
+  const personality = props.ai?.personality ?? null;
+  const context = props.ai?.context ?? null;
 
   return (
     <aside className="debug" aria-labelledby="debug-title">
@@ -125,7 +198,91 @@ export function DebugPanelView(props: DebugPanelViewProps) {
               />
             </dl>
           </section>
+        </>
+      )}
 
+          {personality && (
+            <section className="debug__section" aria-label="Personality">
+              <h3 className="debug__heading">Personality</h3>
+              <dl className="debug__list">
+                <Row label="Dominant" value={personality.profile.dominantTraits.join(', ') || 'none'} />
+                <Row label="Primary" value={personality.profile.primaryTrait} />
+                <Row label="Strength" value={personality.profile.strength} />
+                <Row label="Social style" value={personality.profile.socialStyle} />
+                <Row label="Delta day" value={personality.daily.day ?? '—'} />
+              </dl>
+              {PERSONALITY_TRAITS.map((trait) => (
+                <TraitRow
+                  key={trait}
+                  trait={trait}
+                  value={personality.traits[trait]}
+                  delta={personality.daily.deltas[trait]}
+                  cap={personality.daily.capPerTrait}
+                  busy={busy}
+                  onSet={props.onSetPersonality}
+                />
+              ))}
+              <div className="debug__grid" role="group" aria-label="Personality presets">
+                {PERSONALITY_PRESET_OPTIONS.map((option) => (
+                  <button
+                    key={option.name}
+                    type="button"
+                    className="debug__button"
+                    disabled={busy}
+                    onClick={() => props.onSetPersonality({ preset: option.name })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {personality && (
+            <section className="debug__section" aria-label="Last AI turn">
+              <h3 className="debug__heading">Last AI turn</h3>
+              {props.ai?.lastTurn ? (
+                <dl className="debug__list">
+                  <Row label="Intent" value={props.ai.lastTurn.intent ?? '—'} />
+                  <Row label="Confidence" value={formatNumber(props.ai.lastTurn.confidence, 2)} />
+                  <Row label="Classification" value={props.ai.lastTurn.classification ?? '—'} />
+                  <Row label="Action" value={formatAction(props.ai.lastTurn.action)} />
+                  <Row label="Provider" value={props.ai.lastTurn.provider ?? '—'} />
+                  <Row label="Model" value={props.ai.lastTurn.model ?? '—'} />
+                  <Row
+                    label="Latency"
+                    value={props.ai.lastTurn.latencyMs === null ? '—' : `${props.ai.lastTurn.latencyMs} ms`}
+                  />
+                  <Row
+                    label="Tokens"
+                    value={`${formatNumber(props.ai.lastTurn.inputTokens)} / ${formatNumber(props.ai.lastTurn.outputTokens)}`}
+                  />
+                  <Row label="Fallback used" value={props.ai.lastTurn.fallbackUsed ? 'yes' : 'no'} />
+                </dl>
+              ) : (
+                <p className="debug__hint">No chat turn yet.</p>
+              )}
+            </section>
+          )}
+
+          {context && (
+            <section className="debug__section" aria-label="Context">
+              <h3 className="debug__heading">Context</h3>
+              <dl className="debug__list">
+                <Row label="Mood" value={context.mood} />
+                <Row label="Relationship" value={context.relationship} />
+                <Row label="Messages" value={`${context.recentMessageCount} recent`} />
+                <Row label="Events" value={`${context.recentEventCount} recent`} />
+                <Row
+                  label="Levels"
+                  value={PERSONALITY_TRAITS.map((trait) => `${trait} ${context.levels[trait]}`).join(' · ')}
+                />
+              </dl>
+            </section>
+          )}
+
+      {pet && (
+        <>
           <section className="debug__section" aria-label="Time">
             <h3 className="debug__heading">Time</h3>
             <dl className="debug__list">

@@ -1,4 +1,4 @@
-import type { DebugAdvanceTimeRequest } from '@ai-virtual-pet/contracts';
+import type { DebugAdvanceTimeRequest, PersonalityPresetDto } from '@ai-virtual-pet/contracts';
 
 export interface AdvancePreset {
   readonly label: string;
@@ -19,8 +19,42 @@ export const ADVANCE_PRESETS: readonly AdvancePreset[] = [
 export const DEBUG_STATS = ['hunger', 'energy', 'happiness', 'bond'] as const;
 export type DebugStat = (typeof DEBUG_STATS)[number];
 
+/** Debug personality traits, in canonical order (plan Task 10.1). */
+export const PERSONALITY_TRAITS = ['playful', 'curious', 'shy', 'independent', 'clingy'] as const;
+export type DebugTrait = (typeof PERSONALITY_TRAITS)[number];
+
+export interface PersonalityPresetOption {
+  readonly name: PersonalityPresetDto;
+  readonly label: string;
+}
+
+/** Deterministic presets (plan Task 10.4), reusing the domain's evaluation presets. */
+export const PERSONALITY_PRESET_OPTIONS: readonly PersonalityPresetOption[] = [
+  { name: 'BALANCED', label: 'Balanced' },
+  { name: 'HIGH_PLAYFUL', label: 'Playful' },
+  { name: 'HIGH_CURIOUS', label: 'Curious' },
+  { name: 'HIGH_SHY', label: 'Shy' },
+  { name: 'HIGH_INDEPENDENT', label: 'Independent' },
+  { name: 'HIGH_CLINGY', label: 'Clingy' },
+];
+
 export function formatStat(value: number): string {
   return value.toFixed(2);
+}
+
+/** Raw personality traits: three decimals, matching the domain's stored precision (Task 10.1). */
+export function formatTrait(value: number): string {
+  return value.toFixed(3);
+}
+
+/** Signed trait delta, e.g. `+0.018` (Task 10.2). */
+export function formatSignedDelta(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(3)}`;
+}
+
+/** Turn metadata numbers that may be absent (plan Task 10.5). */
+export function formatNumber(value: number | null, digits = 0): string {
+  return value === null ? '—' : value.toFixed(digits);
 }
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {

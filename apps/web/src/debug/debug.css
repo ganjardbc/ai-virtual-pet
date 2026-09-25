@@ -101,6 +101,16 @@
   grid-template-columns: 90px 64px 1fr auto;
 }
 
+/* Traits add a daily delta column between the raw value and the input (Tasks 10.1–10.2). */
+.debug__trait {
+  grid-template-columns: 78px 56px 1fr 72px auto;
+}
+
+.debug__hint {
+  margin: 0;
+  color: var(--debug-muted);
+}
+
 .debug__key {
   color: var(--debug-muted);
 }

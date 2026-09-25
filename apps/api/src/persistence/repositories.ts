@@ -159,6 +159,8 @@ export interface ConversationRepository {
   findTurn(conversationId: string, clientMessageId: string): Promise<ConversationTurn | null>;
   /** The latest `limit` messages, oldest first. AI context and visible history use different limits. */
   listRecentMessages(conversationId: string, query: MessageQuery): Promise<StoredMessage[]>;
+  /** The latest assistant reply, for AI turn inspection (plan Task 10.5). Null before any reply. */
+  findLatestAssistantMessage(conversationId: string): Promise<StoredMessage | null>;
 }
 
 export class DuplicateMessageError extends Error {

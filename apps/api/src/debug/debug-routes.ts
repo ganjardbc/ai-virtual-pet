@@ -1,4 +1,8 @@
-import { debugAdvanceTimeRequestSchema, debugSetStateRequestSchema } from '@ai-virtual-pet/contracts';
+import {
+  debugAdvanceTimeRequestSchema,
+  debugSetPersonalityRequestSchema,
+  debugSetStateRequestSchema,
+} from '@ai-virtual-pet/contracts';
 import type { FastifyInstance } from 'fastify';
 
 import { ok } from '../http/envelope.js';
@@ -7,6 +11,13 @@ import type { DebugPetService } from './debug-service.js';
 /** Development-only routes. Registered only when debug is explicitly enabled. */
 export function registerDebugRoutes(app: FastifyInstance, service: DebugPetService): void {
   app.get('/api/v1/debug/pet/state', async (request) => ok(request, await service.getState()));
+
+  app.get('/api/v1/debug/ai', async (request) => ok(request, await service.getAi()));
+
+  app.patch('/api/v1/debug/personality', async (request) => {
+    const body = debugSetPersonalityRequestSchema.parse(request.body ?? {});
+    return ok(request, await service.setPersonality(body));
+  });
 
   app.post('/api/v1/debug/time/advance', async (request) => {
     const body = debugAdvanceTimeRequestSchema.parse(request.body ?? {});

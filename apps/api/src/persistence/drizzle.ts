@@ -276,6 +276,17 @@ export class DrizzleConversationRepository implements ConversationRepository {
 
     return rows.reverse().map(toStoredMessage);
   }
+
+  async findLatestAssistantMessage(conversationId: string): Promise<StoredMessage | null> {
+    const [row] = await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'ASSISTANT')))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(1);
+
+    return row ? toStoredMessage(row) : null;
+  }
 }
 
 /** Drizzle wraps driver errors, so the PostgreSQL code may be on the error or its `cause`. */

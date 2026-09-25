@@ -205,6 +205,31 @@ function conversationContract(getRepositories: () => Repositories): void {
     });
   });
 
+  describe('debug queries (plan Task 10.5)', () => {
+    it('finds the latest assistant message, ignoring player messages', async () => {
+      expect(await conversations.findLatestAssistantMessage(conversation.id)).toBeNull();
+
+      const first = await say('turn-1');
+      const firstReply = await reply(first.id, minutes(2), { intent: 'TALK' });
+      expect((await conversations.findLatestAssistantMessage(conversation.id))?.id).toBe(firstReply.id);
+
+      const second = await say('turn-2', minutes(3));
+      const secondReply = await reply(second.id, minutes(4), { intent: 'PLAY' });
+
+      expect((await conversations.findLatestAssistantMessage(conversation.id))?.id).toBe(secondReply.id);
+    });
+
+    it('breaks ties on identical times by insertion order', async () => {
+      const first = await say('turn-1', minutes(1));
+      const firstReply = await reply(first.id, minutes(2), { intent: 'TALK' });
+      const second = await say('turn-2', minutes(2));
+      const secondReply = await reply(second.id, minutes(2), { intent: 'PLAY' });
+
+      expect(secondReply.createdAt).toEqual(firstReply.createdAt);
+      expect((await conversations.findLatestAssistantMessage(conversation.id))?.id).toBe(secondReply.id);
+    });
+  });
+
   it('removes conversations and messages with the pet on deleteAll', async () => {
     const { pets } = getRepositories();
     await say('turn-1');

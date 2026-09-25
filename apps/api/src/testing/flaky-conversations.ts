@@ -48,4 +48,8 @@ export class FlakyConversations implements ConversationRepository {
   listRecentMessages(conversationId: string, query: MessageQuery): Promise<StoredMessage[]> {
     return this.inner.listRecentMessages(conversationId, query);
   }
+
+  findLatestAssistantMessage(conversationId: string): Promise<StoredMessage | null> {
+    return this.inner.findLatestAssistantMessage(conversationId);
+  }
 }

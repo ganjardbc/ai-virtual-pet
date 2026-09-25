@@ -610,6 +610,8 @@ POST   /api/v1/debug/time/advance   {"hours": 6} / {"days": 7}
 POST   /api/v1/debug/pet/sleep
 POST   /api/v1/debug/pet/wake
 PATCH  /api/v1/debug/pet/state      {"hunger": 20, "energy": 10}
+PATCH  /api/v1/debug/personality    {"preset": "HIGH_PLAYFUL"} / {"playful": 0.8}
+GET    /api/v1/debug/ai             last turn metadata, personality, bounded context
 POST   /api/v1/debug/pet/reset
 ```
 

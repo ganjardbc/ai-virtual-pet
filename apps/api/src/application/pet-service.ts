@@ -309,11 +309,12 @@ export class PetService {
       const personality = this.loadPersonality(aggregate, simulated.events, now);
       const mutation = await operation({ aggregate, state: simulated.state, personality, now });
       const nextPersonality = mutation.personality ?? personality;
-      const events = [
-        ...simulated.events,
-        ...mutation.events,
-        ...personalityChangedEvent(aggregate.personality, nextPersonality, now),
-      ];
+      // A mutation may supply its own PERSONALITY_CHANGED event (e.g. a debug set carrying a reason);
+      // otherwise the diff from the stored personality is recorded automatically.
+      const personalityEvents = mutation.events.some((event) => event.type === 'PERSONALITY_CHANGED')
+        ? []
+        : personalityChangedEvent(aggregate.personality, nextPersonality, now);
+      const events = [...simulated.events, ...mutation.events, ...personalityEvents];
       const changed =
         events.length > 0 ||
         mutation.pet !== aggregate.pet ||

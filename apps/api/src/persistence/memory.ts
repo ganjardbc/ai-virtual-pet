@@ -212,6 +212,14 @@ export class InMemoryStore implements PetRepository, EventRepository, Conversati
     return ordered.slice(Math.max(0, ordered.length - query.limit)).map((stored) => structuredClone(stored));
   }
 
+  async findLatestAssistantMessage(conversationId: string): Promise<StoredMessage | null> {
+    const latest = this.messageLog
+      .filter((stored) => stored.conversationId === conversationId && stored.role === 'ASSISTANT')
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)[0];
+
+    return latest ? structuredClone(latest) : null;
+  }
+
   private append(petId: PetId, events: readonly DomainEvent[]): void {
     for (const event of events) {
       this.eventLog.push(structuredClone({ ...event, id: this.nextEventId++, petId }));

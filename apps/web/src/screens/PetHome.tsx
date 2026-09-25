@@ -161,10 +161,6 @@ export function PetHome({ snapshot, onTalk }: PetHomeProps) {
         />
       </Habitat>
 
-      {returning.presentation && returning.presentation.items.length > 0 && (
-        <RecapCard items={returning.presentation.items} onDismiss={returning.dismiss} />
-      )}
-
       <div className="actions" role="group" aria-label={copy.actions.group}>
         <ActionButton
           icon={<FeedIcon />}
@@ -210,6 +206,10 @@ export function PetHome({ snapshot, onTalk }: PetHomeProps) {
           { label: copy.status.mood, value: moodText[snapshot.derived.mood] },
         ]}
       />
+
+      {returning.presentation && returning.presentation.items.length > 0 && (
+        <RecapCard items={returning.presentation.items} onDismiss={returning.dismiss} />
+      )}
 
       {systemError && <SystemMessage message={systemError} />}
     </GameShell>

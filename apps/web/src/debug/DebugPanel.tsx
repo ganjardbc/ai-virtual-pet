@@ -1,10 +1,10 @@
-import type { DebugState } from '@ai-virtual-pet/contracts';
+import type { DebugAi, DebugSetPersonalityRequest, DebugState } from '@ai-virtual-pet/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { ApiError } from '../api/client';
 import { petQueryKey, storeSnapshot, usePet } from '../api/pet-queries';
-import { debugApi, debugQueryKey } from './debug-api';
+import { aiQueryKey, debugApi, debugQueryKey } from './debug-api';
 import { DebugPanelView, type DebugViewStatus } from './DebugPanelView';
 import type { AdvancePreset, DebugStat } from './format';
 import './debug.css';
@@ -14,6 +14,7 @@ type DebugCommand =
   | { kind: 'sleep' }
   | { kind: 'wake' }
   | { kind: 'set'; stat: DebugStat; value: number }
+  | { kind: 'set-personality'; body: DebugSetPersonalityRequest }
   | { kind: 'reset' };
 
 function statusOf(error: unknown): DebugViewStatus {
@@ -31,6 +32,7 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const pet = usePet();
   const debug = useQuery({ queryKey: debugQueryKey, queryFn: debugApi.state, retry: false });
+  const ai = useQuery({ queryKey: aiQueryKey, queryFn: debugApi.ai, retry: false });
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Player actions change the pet: keep the raw view in step.
@@ -38,11 +40,16 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
   const petSimulatedAt = pet.data?.state.lastSimulatedAt;
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: debugQueryKey });
+    void queryClient.invalidateQueries({ queryKey: aiQueryKey });
   }, [petVersion, petSimulatedAt, queryClient]);
 
   const apply = (state: DebugState) => {
     queryClient.setQueryData(debugQueryKey, state);
     storeSnapshot(queryClient, state.pet);
+  };
+
+  const applyAi = (next: DebugAi) => {
+    queryClient.setQueryData(aiQueryKey, next);
   };
 
   const command = useMutation({
@@ -64,11 +71,21 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
           apply(await debugApi.setState({ [input.stat]: input.value }));
           return `Set ${input.stat} to ${input.value}`;
         }
+        case 'set-personality': {
+          applyAi(await debugApi.setPersonality(input.body));
+          // A set runs through the normal simulate/save flow, so the raw view may have moved too.
+          await queryClient.invalidateQueries({ queryKey: debugQueryKey });
+          return 'Personality set';
+        }
         case 'reset': {
           await debugApi.reset();
           queryClient.setQueryData(petQueryKey, null);
           queryClient.removeQueries({ queryKey: debugQueryKey });
-          await queryClient.invalidateQueries({ queryKey: debugQueryKey });
+          queryClient.removeQueries({ queryKey: aiQueryKey });
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: debugQueryKey }),
+            queryClient.invalidateQueries({ queryKey: aiQueryKey }),
+          ]);
           return 'Pet reset';
         }
       }
@@ -84,6 +101,7 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
     <DebugPanelView
       status={status}
       state={debug.data}
+      ai={ai.data}
       feedback={feedback}
       busy={command.isPending}
       onClose={onClose}
@@ -91,6 +109,7 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
       onSleep={() => command.mutate({ kind: 'sleep' })}
       onWake={() => command.mutate({ kind: 'wake' })}
       onSet={(stat, value) => command.mutate({ kind: 'set', stat, value })}
+      onSetPersonality={(body) => command.mutate({ kind: 'set-personality', body })}
       onReset={() => command.mutate({ kind: 'reset' })}
     />
   );
