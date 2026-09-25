@@ -13,6 +13,7 @@
     "test": "pnpm --recursive test",
     "playtest:reset": "pnpm --filter @ai-virtual-pet/api playtest:reset",
     "playtest:advance": "pnpm --filter @ai-virtual-pet/api playtest:advance",
-    "ai:smoke": "pnpm --filter @ai-virtual-pet/api ai:smoke"
+    "ai:smoke": "pnpm --filter @ai-virtual-pet/api ai:smoke",
+    "ai:eval:interpretation": "pnpm --filter @ai-virtual-pet/api ai:eval:interpretation"
   }
 }

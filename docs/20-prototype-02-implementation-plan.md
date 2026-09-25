@@ -1731,6 +1731,8 @@ from:
 
 Subject matters.
 
+Note (Unit 05): `NONE` in this task and in Task 5.7 predates the TALK/NONE split in Task 5.1 and means **no state-changing action**. Conversation such as "Kamu suka main?" is `TALK`. The corpus therefore expects `NO_ACTION`, which accepts `TALK` or `NONE`; only FEED / PLAY / SLEEP must match exactly.
+
 ---
 
 # 60. Task 5.5 — One Action Enforcement
@@ -1758,6 +1760,8 @@ NONE
 depending on interpretation.
 
 Never execute more than one state-changing action.
+
+Frozen in Unit 05: a message asking for more than one care action → `NONE` (no guessing a primary action).
 
 ---
 

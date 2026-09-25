@@ -13,7 +13,8 @@
     "test": "vitest run",
     "playtest:reset": "tsx src/scripts/reset-pet.ts",
     "playtest:advance": "tsx src/scripts/advance-time.ts",
-    "ai:smoke": "tsx src/scripts/ai-smoke.ts"
+    "ai:smoke": "tsx src/scripts/ai-smoke.ts",
+    "ai:eval:interpretation": "tsx src/scripts/ai-eval-interpretation.ts"
   },
   "dependencies": {
     "@ai-virtual-pet/contracts": "workspace:*",
