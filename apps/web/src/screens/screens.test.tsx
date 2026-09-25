@@ -44,6 +44,15 @@ describe('player screens', () => {
     }
   });
 
+  it('lays out Pet Home full-screen with floating needs bars and no raw numbers', () => {
+    const markup = render(<PetHome snapshot={makeSnapshot()} />);
+
+    expect(markup).toContain('game--home');
+    expect(markup).toContain('game--full');
+    expect((markup.match(/class="stats__fill"/g) ?? []).length).toBe(3);
+    expect(visibleText(markup)).not.toContain('72');
+  });
+
   it('presents sleep: Feed, Play, and Talk disabled, Sleeping active, Energy recovering, no Wake button', () => {
     const snapshot = makeSnapshot({
       state: { currentActivity: 'SLEEPING', sleepStartedAt: '2026-09-25T11:00:00.000Z' },
@@ -76,7 +85,8 @@ describe('Talk', () => {
     expect(pet).toBeLessThan(log);
     expect(log).toBeLessThan(input);
     expect(markup).toContain('>Momo<');
-    expect(markup).toContain('class="game game--conversation"');
+    expect(markup).toContain('game--conversation');
+    expect(markup).toContain('game--full');
     expect(markup).toContain('aria-busy="true"');
   });
 

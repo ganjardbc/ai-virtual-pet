@@ -6,15 +6,24 @@ export const ShellCornerContext = createContext<ReactNode>(null);
 interface GameShellProps {
   readonly title?: string | undefined;
   readonly children: ReactNode;
-  readonly variant?: 'default' | 'conversation';
+  readonly variant?: 'default' | 'conversation' | 'home' | 'stage';
 }
+
+const variantClass = {
+  default: 'game',
+  conversation: 'game game--conversation',
+  home: 'game game--home',
+  stage: 'game game--stage',
+} as const;
 
 /** Bounded, centered game container: personal and focused, never a full-width dashboard. */
 export function GameShell({ title, children, variant = 'default' }: GameShellProps) {
   const corner = useContext(ShellCornerContext);
+  // Full-bleed views fill the screen; only the shared card layout keeps a header.
+  const fullBleed = variant !== 'default';
 
   return (
-    <div className="shell">
+    <div className={fullBleed ? 'shell shell--home' : 'shell'}>
       <div className="shell__atmosphere" aria-hidden="true">
         <span className="shell__spark shell__spark--one" />
         <span className="shell__spark shell__spark--two" />
@@ -22,8 +31,8 @@ export function GameShell({ title, children, variant = 'default' }: GameShellPro
         <span className="shell__leaf shell__leaf--one" />
         <span className="shell__leaf shell__leaf--two" />
       </div>
-      <main className={variant === 'conversation' ? 'game game--conversation' : 'game'}>
-        {(title || corner) && (
+      <main className={`${variantClass[variant]}${fullBleed ? ' game--full' : ''}`}>
+        {!fullBleed && (title || corner) && (
           <header className="game__header">
             {title ? (
               <div className="game__identity">
@@ -46,6 +55,7 @@ export function GameShell({ title, children, variant = 'default' }: GameShellPro
           </header>
         )}
         {children}
+        {variant === 'stage' && corner && <div className="game__corner">{corner}</div>}
       </main>
     </div>
   );

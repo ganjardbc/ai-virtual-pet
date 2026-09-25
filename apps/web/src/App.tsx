@@ -15,10 +15,11 @@ const HATCH_MIN_MS = 2_800;
 const NAMING_CELEBRATION_MS = 1_600;
 
 /**
- * Debug UI exists only in development builds or when explicitly enabled. The dead branch is
- * removed from production bundles, so the lazy debug chunk is never shipped to players.
+ * The Debug entry mirrors the server's debug API flag (ENABLE_DEBUG_API, injected by Vite as
+ * VITE_ENABLE_DEBUG_API). It is absent unless the server actually exposes debug routes, and the
+ * dead branch keeps the lazy debug chunk out of builds that do not enable it.
  */
-const DEBUG_UI_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEBUG_UI === 'true';
+const DEBUG_UI_ENABLED = import.meta.env.VITE_ENABLE_DEBUG_API === 'true';
 const DebugPanel = DEBUG_UI_ENABLED ? lazy(() => import('./debug/DebugPanel')) : null;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

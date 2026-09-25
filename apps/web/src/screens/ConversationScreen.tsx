@@ -6,6 +6,8 @@ import { Button } from '../components/Button';
 import { GameShell } from '../components/GameShell';
 import { Habitat } from '../components/Habitat';
 import { PetCharacter } from '../components/PetCharacter';
+import { PetIdentity } from '../components/PetIdentity';
+import { PetStats } from '../components/PetStats';
 import { ReactionBubble } from '../components/ReactionBubble';
 import { SystemMessage } from '../components/SystemMessage';
 import {
@@ -17,6 +19,7 @@ import {
   type PendingTurn,
 } from '../presentation/chat';
 import { activityText, copy, moodText } from '../presentation/copy';
+import { petStatRows } from '../presentation/pet-stats';
 import { idleReaction, reactionForChat, type Reaction } from '../presentation/reactions';
 import { timeOfDay } from '../presentation/time-of-day';
 import { visualFromSnapshot, type PetVisual } from '../presentation/visual';
@@ -147,13 +150,7 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
   const canSend = composeMessage(draft).valid && !pending && !sleeping;
 
   return (
-    <GameShell title={name} variant="conversation">
-      <div className="talk__bar">
-        <Button variant="ghost" className="talk__back" onClick={onBack}>
-          <span aria-hidden="true">←</span> {copy.chat.back}
-        </Button>
-      </div>
-
+    <GameShell variant="conversation">
       <Habitat
         timeOfDay={timeOfDay(snapshot.state.lastSimulatedAt)}
         pose={visual.pose}
@@ -166,7 +163,18 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
         />
       </Habitat>
 
+      <div className="pet-hud">
+        <PetIdentity name={name} />
+        <PetStats title={copy.status.title} rows={petStatRows(snapshot)} />
+      </div>
+
       <section className="conversation" aria-label={copy.chat.region(name)}>
+        <div className="conversation__head talk__bar">
+          <Button variant="ghost" className="talk__back" onClick={onBack}>
+            <span aria-hidden="true">←</span> {copy.chat.back}
+          </Button>
+        </div>
+
         <ol
           className="conversation__log"
           role="log"

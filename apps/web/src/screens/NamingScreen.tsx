@@ -60,7 +60,7 @@ export function NamingScreen({ onSubmit, celebratingName }: NamingScreenProps) {
   };
 
   return (
-    <GameShell>
+    <GameShell variant="stage">
       <div className="stage">
         <div className="stage__character">
           <PetCharacter
@@ -74,26 +74,28 @@ export function NamingScreen({ onSubmit, celebratingName }: NamingScreenProps) {
             {celebratingName ? copy.naming.celebrate(celebratingName) : copy.naming.ask}
           </p>
         </div>
-        <form className="naming" onSubmit={handleSubmit} noValidate hidden={Boolean(celebratingName)}>
-          <TextInput
-            ref={inputRef}
-            id="pet-name"
-            label={copy.naming.label}
-            placeholder={copy.naming.placeholder}
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setServerError(null);
-            }}
-            autoComplete="off"
-            maxLength={PET_NAME_MAX_LENGTH + 10}
-            disabled={Boolean(celebratingName)}
-            error={fieldError}
-          />
-          <Button type="submit" disabled={!canSubmit}>
-            {submitting ? copy.naming.saving : copy.naming.submit}
-          </Button>
-        </form>
+        <div className="stage__dock">
+          <form className="naming" onSubmit={handleSubmit} noValidate hidden={Boolean(celebratingName)}>
+            <TextInput
+              ref={inputRef}
+              id="pet-name"
+              label={copy.naming.label}
+              placeholder={copy.naming.placeholder}
+              value={value}
+              onChange={(event) => {
+                setValue(event.target.value);
+                setServerError(null);
+              }}
+              autoComplete="off"
+              maxLength={PET_NAME_MAX_LENGTH + 10}
+              disabled={Boolean(celebratingName)}
+              error={fieldError}
+            />
+            <Button type="submit" disabled={!canSubmit}>
+              {submitting ? copy.naming.saving : copy.naming.submit}
+            </Button>
+          </form>
+        </div>
         {systemError && <SystemMessage message={systemError} />}
       </div>
     </GameShell>

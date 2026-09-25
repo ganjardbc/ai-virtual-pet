@@ -7,20 +7,19 @@ import { ActionButton, FeedIcon, PlayIcon, SleepIcon, TalkIcon } from '../compon
 import { GameShell } from '../components/GameShell';
 import { Habitat } from '../components/Habitat';
 import { PetCharacter } from '../components/PetCharacter';
+import { PetIdentity } from '../components/PetIdentity';
+import { PetStats } from '../components/PetStats';
 import { ReactionBubble } from '../components/ReactionBubble';
 import { RecapCard } from '../components/RecapCard';
-import { StatusList } from '../components/StatusList';
 import { SystemMessage } from '../components/SystemMessage';
 import {
-  RECOVERING_TEXT,
   activityText,
   copy,
-  energyText,
-  fullnessText,
   moodText,
 } from '../presentation/copy';
 import { idleReaction, reactionForAction, returnReaction, type Reaction } from '../presentation/reactions';
 import { MEANINGFUL_ABSENCE_MS, recapItems } from '../presentation/recap';
+import { petStatRows } from '../presentation/pet-stats';
 import { timeOfDay } from '../presentation/time-of-day';
 import { visualFromSnapshot } from '../presentation/visual';
 
@@ -148,7 +147,7 @@ export function PetHome({ snapshot, onTalk }: PetHomeProps) {
   const sleepingHint = sleeping ? copy.actions.sleepingHint(name) : undefined;
 
   return (
-    <GameShell title={name}>
+    <GameShell variant="home">
       <Habitat
         timeOfDay={timeOfDay(snapshot.state.lastSimulatedAt)}
         pose={visual.pose}
@@ -160,6 +159,11 @@ export function PetHome({ snapshot, onTalk }: PetHomeProps) {
           label={`${name}, ${narration ?? moodText[snapshot.derived.mood].toLowerCase()}`}
         />
       </Habitat>
+
+      <div className="pet-hud">
+        <PetIdentity name={name} />
+        <PetStats title={copy.status.title} rows={petStatRows(snapshot)} />
+      </div>
 
       <div className="actions" role="group" aria-label={copy.actions.group}>
         <ActionButton
@@ -194,18 +198,6 @@ export function PetHome({ snapshot, onTalk }: PetHomeProps) {
           active={sleeping}
         />
       </div>
-
-      <StatusList
-        title={copy.status.title}
-        rows={[
-          { label: copy.status.fullness, value: fullnessText[snapshot.derived.needs.fullness] },
-          {
-            label: copy.status.energy,
-            value: sleeping ? RECOVERING_TEXT : energyText[snapshot.derived.needs.energy],
-          },
-          { label: copy.status.mood, value: moodText[snapshot.derived.mood] },
-        ]}
-      />
 
       {returning.presentation && returning.presentation.items.length > 0 && (
         <RecapCard items={returning.presentation.items} onDismiss={returning.dismiss} />

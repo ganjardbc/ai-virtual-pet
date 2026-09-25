@@ -10,9 +10,14 @@ export default defineConfig(({ mode }) => {
   // The API port lives in the repository-root .env (shared with the API), not in apps/web.
   const env = { ...loadEnv(mode, repositoryRoot, ''), ...process.env };
   const apiPort = env.API_PORT ?? '3000';
+  // The Debug button mirrors the server's debug API flag; hidden unless ENABLE_DEBUG_API=true.
+  const debugApiEnabled = env.ENABLE_DEBUG_API === 'true';
 
   return {
     plugins: [react()],
+    define: {
+      'import.meta.env.VITE_ENABLE_DEBUG_API': JSON.stringify(debugApiEnabled ? 'true' : 'false'),
+    },
     resolve: {
       alias: {
         // Shared contracts from source: no prior package build needed for dev, tests, or bundling.

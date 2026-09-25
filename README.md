@@ -617,7 +617,7 @@ POST   /api/v1/debug/pet/reset
 
 Time travel hanya memajukan offset debug clock lalu menjalankan simulation normal.
 
-Debug UI (tombol **Debug** di pojok game) hanya ada pada development build (`pnpm dev`) atau jika web di-build dengan `VITE_ENABLE_DEBUG_UI=true`. Production build tanpa flag tersebut tidak menyertakan kode Debug UI sama sekali.
+Debug UI (tombol **Debug** di sebelah kanan nameplate pet) hanya muncul jika `ENABLE_DEBUG_API=true` — flag yang sama dengan Debug API. Web membaca flag ini saat dev/build dan meneruskannya ke client sebagai `VITE_ENABLE_DEBUG_API`; tanpa flag tersebut tombol dan kode Debug UI tidak disertakan sama sekali.
 
 Drizzle row types hanya dipakai di `apps/api/src/db` dan `apps/api/src/persistence`; layer lain memakai domain model melalui repository contracts.
 
