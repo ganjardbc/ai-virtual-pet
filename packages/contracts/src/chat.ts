@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+/** Prototype limit for one player message (plan Task 4.6). */
+export const CHAT_MESSAGE_MAX_LENGTH = 1000;
+
+/**
+ * One player turn. `clientMessageId` is generated once per turn and resent unchanged on Retry,
+ * so a retried turn is never applied twice (plan Task 3.8).
+ */
+export const chatRequestSchema = z.strictObject({
+  clientMessageId: z.uuid(),
+  message: z.string().trim().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+});
+export type ChatRequest = z.infer<typeof chatRequestSchema>;
+
 export const chatMessageRoleSchema = z.enum(['USER', 'ASSISTANT']);
 export type ChatMessageRole = z.infer<typeof chatMessageRoleSchema>;
 

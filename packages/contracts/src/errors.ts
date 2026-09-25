@@ -10,6 +10,8 @@ export const apiErrorCodeSchema = z.enum([
   'PET_ALREADY_EXISTS',
   'INVALID_PET_STAGE',
   'PET_STATE_CONFLICT',
+  'CHAT_IN_PROGRESS',
+  'AI_UNAVAILABLE',
   'INTERNAL_ERROR',
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
@@ -21,6 +23,8 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   PET_ALREADY_EXISTS: 409,
   INVALID_PET_STAGE: 409,
   PET_STATE_CONFLICT: 409,
+  CHAT_IN_PROGRESS: 409,
+  AI_UNAVAILABLE: 503,
   INTERNAL_ERROR: 500,
 };
 
