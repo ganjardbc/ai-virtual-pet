@@ -9,7 +9,15 @@ import {
   type ActionResult,
   type PetSnapshot,
 } from '@ai-virtual-pet/contracts';
-import { FakeClock, SeededRandom } from '@ai-virtual-pet/domain';
+import {
+  FakeClock,
+  SeededRandom,
+  createEgg,
+  createInitialPetState,
+  hatchPet,
+  namePet,
+  type PersonalityState,
+} from '@ai-virtual-pet/domain';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -207,6 +215,150 @@ function integrationSuite(getRepositories: () => Repositories, reopen: () => Pro
     expect(after.state.hunger).toBe(sequentialHunger[succeeded.length - 1]);
     expect(after.pet.version).toBe(before.pet.version + succeeded.length);
     expect(after.recentEvents.filter((event) => event.type === 'PET_FED')).toHaveLength(succeeded.length);
+  });
+
+  describe('Prototype 0.2 personality persistence (Unit 02)', () => {
+    const DAY_MS = 24 * HOUR_MS;
+
+    async function personality(): Promise<PersonalityState> {
+      const stored = (await getRepositories().pets.findCurrent())?.personality;
+      expect(stored).toBeDefined();
+      return stored as PersonalityState;
+    }
+
+    /** Wakes the pet and restores Energy so Play is accepted. */
+    async function readyToPlay(target: Client = client): Promise<void> {
+      await target.wakeIfSleeping();
+      await target.setStats({ energy: 100 });
+    }
+
+    it('has no personality as an Egg and a moderate one after hatching', async () => {
+      await client.app.inject({ method: 'POST', url: '/api/v1/pet' });
+      expect((await getRepositories().pets.findCurrent())?.personality).toBeUndefined();
+
+      await client.app.inject({ method: 'POST', url: '/api/v1/pet/hatch' });
+      const { traits } = await personality();
+
+      for (const value of Object.values(traits)) {
+        expect(value).toBeGreaterThanOrEqual(0.35);
+        expect(value).toBeLessThanOrEqual(0.55);
+      }
+    });
+
+    it('raises Playful after an accepted Play, not after a rejected one', async () => {
+      await client.startNamedBaby();
+      const before = await personality();
+
+      expect((await client.act('PLAY')).status).toBe('SUCCESS');
+      const played = await personality();
+      expect(played.traits.playful).toBeCloseTo(before.traits.playful + 0.006, 6);
+      expect({ ...played.traits, playful: before.traits.playful }).toEqual(before.traits);
+
+      await client.setStats({ energy: 10 });
+      expect(await client.act('PLAY')).toMatchObject({ status: 'REJECTED', reason: 'TOO_TIRED' });
+      expect(await personality()).toEqual(played);
+    });
+
+    it('raises Clingy slightly after Feed and leaves personality unchanged after Sleep', async () => {
+      await client.startNamedBaby();
+      await client.setStats({ hunger: 20 });
+      const before = await personality();
+
+      expect((await client.act('FEED')).status).toBe('SUCCESS');
+      const fed = await personality();
+      expect(fed.traits.clingy).toBeCloseTo(before.traits.clingy + 0.001, 6);
+
+      expect((await client.act('SLEEP')).status).toBe('SUCCESS');
+      expect((await personality()).traits).toEqual(fed.traits);
+    });
+
+    it('enforces the daily cap across an API restart and resets it on the next UTC day', async () => {
+      await client.startNamedBaby();
+      const start = (await personality()).traits.playful;
+
+      for (let play = 0; play < 6; play += 1) {
+        await readyToPlay();
+        expect((await client.act('PLAY')).status).toBe('SUCCESS');
+      }
+      expect((await personality()).traits.playful).toBeCloseTo(start + 0.03, 6);
+      await client.app.close();
+
+      const restarted = new Client(await reopen(), client.clock.now(), 11);
+      await readyToPlay(restarted);
+      expect((await restarted.act('PLAY')).status).toBe('SUCCESS');
+      expect((await personality()).traits.playful).toBeCloseTo(start + 0.03, 6);
+
+      // START is 08:00 UTC, so 16 hours later is the next UTC day.
+      restarted.advance(16 * HOUR_MS);
+      await readyToPlay(restarted);
+      expect((await restarted.act('PLAY')).status).toBe('SUCCESS');
+      const nextDay = await personality();
+      expect(nextDay.traits.playful).toBeCloseTo(start + 0.036, 6);
+      expect(nextDay.daily.day).toBe('2026-09-26');
+      await restarted.app.close();
+    });
+
+    it('does not let concurrent Plays bypass the daily cap', async () => {
+      await client.startNamedBaby();
+      const start = (await personality()).traits.playful;
+      await client.setStats({ energy: 100 });
+
+      const responses = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          client.app.inject({ method: 'POST', url: '/api/v1/pet/actions', payload: { type: 'PLAY' } }),
+        ),
+      );
+      const accepted = responses.filter(
+        (response) => response.statusCode === 200 && actionEnvelope.parse(response.json()).data.status === 'SUCCESS',
+      ).length;
+
+      expect(accepted).toBeGreaterThan(0);
+      expect((await personality()).traits.playful).toBeCloseTo(start + Math.min(accepted, 5) * 0.006, 6);
+    });
+
+    it('grants at most one Independent signal for a 7-day absence', async () => {
+      await client.startNamedBaby();
+      const before = await personality();
+
+      client.advance(7 * DAY_MS);
+      await client.get();
+      const after = await personality();
+      const gained = after.traits.independent - before.traits.independent;
+
+      expect(gained).toBeLessThanOrEqual(0.001 + 1e-9);
+      expect(gained).toBeCloseTo(after.lastIndependentSignalDay === null ? 0 : 0.001, 6);
+      expect(after.lastIndependentSignalDay).toBeOneOf([null, '2026-10-02']);
+    });
+
+    it('gives an existing Prototype 0.1 Baby a personality on first load without resetting its state', async () => {
+      const { pets } = getRepositories();
+      const egg = createEgg({ id: 'legacy-pet', createdAt: START });
+      await pets.create(egg, createInitialPetState(egg.id, START));
+      const legacyState = { ...createInitialPetState(egg.id, START), hunger: 42, bond: 37.5 };
+      await pets.save({ pet: namePet(hatchPet(egg, START), 'Momo'), state: legacyState, expectedVersion: 0, events: [] });
+      expect((await pets.findCurrent())?.personality).toBeUndefined();
+
+      const loaded = await client.get();
+
+      expect(loaded.pet).toMatchObject({ id: 'legacy-pet', name: 'Momo', stage: 'BABY' });
+      expect(loaded.state).toMatchObject({ hunger: 42, bond: 37.5 });
+      const created = await personality();
+      expect(created.petId).toBe('legacy-pet');
+
+      await client.get();
+      expect(await personality()).toEqual(created);
+    });
+
+    it('removes personality on debug reset', async () => {
+      await client.startNamedBaby();
+      await personality();
+
+      await client.app.inject({ method: 'POST', url: '/api/v1/debug/pet/reset' });
+      expect(await getRepositories().pets.findCurrent()).toBeNull();
+
+      await client.app.inject({ method: 'POST', url: '/api/v1/pet' });
+      expect((await getRepositories().pets.findCurrent())?.personality).toBeUndefined();
+    });
   });
 
   describe('8.6 sleep boundaries', () => {

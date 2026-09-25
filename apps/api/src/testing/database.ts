@@ -22,5 +22,5 @@ export async function openTestDatabase(url: string): Promise<DatabaseConnection>
 }
 
 export async function truncateAll(connection: DatabaseConnection): Promise<void> {
-  await connection.db.execute(sql`truncate table events, pet_states, pets restart identity cascade`);
+  await connection.db.execute(sql`truncate table events, pet_personalities, pet_states, pets restart identity cascade`);
 }

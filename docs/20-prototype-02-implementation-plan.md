@@ -923,8 +923,9 @@ Also:
 
 ```text
 independentSignalDate    // Task 1.7 once-per-day guard
-version                  // optimistic concurrency (Task 2.4)
 ```
+
+No separate `version` column: personality is part of the pet aggregate and is only written inside `PetRepository.save`, guarded by `pets.version` (Task 2.4, implemented in Unit 02).
 
 Foreign key:
 
@@ -992,19 +993,20 @@ Do not duplicate personality mutation logic across Chat and Play routes.
 
 Personality mutation is read → modify → write. Without protection, two concurrent requests can overwrite each other and bypass the daily cap.
 
-Rule:
+Rule (as implemented in Unit 02):
 
 ```text
-personality save uses optimistic concurrency
-→ update ... where petId = ? and version = expectedVersion
-→ on conflict: reload, re-apply signal, retry
+personality is part of PetAggregate
+→ written only by PetRepository.save, in the same transaction as pet state + events
+→ guarded by the existing pets.version optimistic check
+→ on conflict: PetService.mutate reloads, re-applies the signal, retries
 ```
 
-Reuse the same retry bound as `PetService` (`DEFAULT_MAX_ATTEMPTS`).
+Same retry bound as `PetService` (`DEFAULT_MAX_ATTEMPTS`).
 
-When a personality signal is caused by a game action (Play/Feed), prefer persisting the personality update **in the same transaction** as the pet state + events save, so an accepted action and its personality signal commit together.
+So an accepted action and its personality signal always commit together, and concurrent requests cannot overwrite each other's personality or bypass the daily cap.
 
-If implementation keeps them in separate transactions, a lost personality signal after a committed action is acceptable (tiny delta); a personality signal without a committed action is **not** acceptable.
+Any future personality write (debug set, chat signal) must also go through `PetService.mutate` / `PetRepository.save`; never write `pet_personalities` directly.
 
 Never hold a transaction open during an LLM request (scope §103).
 

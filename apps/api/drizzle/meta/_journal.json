@@ -8,6 +8,13 @@
       "when": 1790331708753,
       "tag": "0000_initial_pet_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790350812277,
+      "tag": "0001_personality",
+      "breakpoints": true
     }
   ]
 }

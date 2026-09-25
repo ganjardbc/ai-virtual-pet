@@ -1,16 +1,18 @@
 import {
+  createPersonalityState,
   createPetState,
   type DomainEvent,
   type DomainEventType,
   type Pet,
   type PetActivity,
+  type PersonalityState,
   type PetId,
   type PetState,
 } from '@ai-virtual-pet/domain';
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 
 import type { Database } from '../db/client.js';
-import { events, pets, petStates } from '../db/schema.js';
+import { events, petPersonalities, pets, petStates } from '../db/schema.js';
 import {
   ConcurrencyError,
   PetAlreadyExistsError,
@@ -30,6 +32,7 @@ const SINGLE_PET_CREATE_LOCK = 42_01;
 type PetRow = typeof pets.$inferSelect;
 type PetStateRow = typeof petStates.$inferSelect;
 type EventRow = typeof events.$inferSelect;
+type PersonalityRow = typeof petPersonalities.$inferSelect;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export class DrizzlePetRepository implements PetRepository {
@@ -37,13 +40,14 @@ export class DrizzlePetRepository implements PetRepository {
 
   async findCurrent(): Promise<PetAggregate | null> {
     const [row] = await this.db
-      .select({ pet: pets, state: petStates })
+      .select({ pet: pets, state: petStates, personality: petPersonalities })
       .from(pets)
       .innerJoin(petStates, eq(petStates.petId, pets.id))
+      .leftJoin(petPersonalities, eq(petPersonalities.petId, pets.id))
       .orderBy(desc(pets.createdAt))
       .limit(1);
 
-    return row ? toAggregate(row.pet, row.state) : null;
+    return row ? toAggregate(row.pet, row.state, row.personality) : null;
   }
 
   async create(pet: Pet, state: PetState, initialEvents: readonly DomainEvent[] = []): Promise<PetAggregate> {
@@ -62,12 +66,12 @@ export class DrizzlePetRepository implements PetRepository {
       const [stateRow] = await tx.insert(petStates).values(toStateValues(state)).returning();
       await insertEvents(tx, pet.id, initialEvents);
 
-      return toAggregate(required(petRow), required(stateRow));
+      return toAggregate(required(petRow), required(stateRow), null);
     });
   }
 
   async save(input: SavePetInput): Promise<PetAggregate> {
-    assertStateBelongsToPet(input.pet, input.state);
+    assertStateBelongsToPet(input.pet, input.state, input.personality);
 
     return this.db.transaction(async (tx) => {
       const now = new Date();
@@ -89,14 +93,17 @@ export class DrizzlePetRepository implements PetRepository {
         .set({ ...toStateValues(input.state), updatedAt: now })
         .where(eq(petStates.petId, input.pet.id))
         .returning();
+      const personalityRow = input.personality
+        ? await upsertPersonality(tx, input.personality, now)
+        : await findPersonality(tx, input.pet.id);
       await insertEvents(tx, input.pet.id, input.events);
 
-      return toAggregate(petRow, required(stateRow));
+      return toAggregate(petRow, required(stateRow), personalityRow);
     });
   }
 
   async deleteAll(): Promise<void> {
-    // pet_states and events cascade.
+    // pet_states, pet_personalities, and events cascade.
     await this.db.delete(pets);
   }
 }
@@ -124,6 +131,22 @@ export class DrizzleEventRepository implements EventRepository {
 
     return rows.map((row) => row.occurredAt);
   }
+}
+
+async function upsertPersonality(tx: Transaction, personality: PersonalityState, now: Date): Promise<PersonalityRow> {
+  const values = toPersonalityValues(personality);
+  const [row] = await tx
+    .insert(petPersonalities)
+    .values(values)
+    .onConflictDoUpdate({ target: petPersonalities.petId, set: { ...values, updatedAt: now } })
+    .returning();
+
+  return required(row);
+}
+
+async function findPersonality(tx: Transaction, petId: PetId): Promise<PersonalityRow | null> {
+  const [row] = await tx.select().from(petPersonalities).where(eq(petPersonalities.petId, petId));
+  return row ?? null;
 }
 
 async function insertEvents(tx: Transaction, petId: PetId, domainEvents: readonly DomainEvent[]): Promise<void> {
@@ -167,8 +190,53 @@ function toStateValues(state: PetState) {
   };
 }
 
-function toAggregate(petRow: PetRow, stateRow: PetStateRow): PetAggregate {
-  return { pet: toPet(petRow), state: toPetState(stateRow), version: petRow.version };
+function toPersonalityValues(personality: PersonalityState) {
+  const { traits, daily } = personality;
+
+  return {
+    petId: personality.petId,
+    ...traits,
+    dailyDeltaDate: daily.day,
+    playfulDailyDelta: daily.deltas.playful,
+    curiousDailyDelta: daily.deltas.curious,
+    shyDailyDelta: daily.deltas.shy,
+    independentDailyDelta: daily.deltas.independent,
+    clingyDailyDelta: daily.deltas.clingy,
+    independentSignalDate: personality.lastIndependentSignalDay,
+  };
+}
+
+function toAggregate(petRow: PetRow, stateRow: PetStateRow, personalityRow: PersonalityRow | null): PetAggregate {
+  return {
+    pet: toPet(petRow),
+    state: toPetState(stateRow),
+    ...(personalityRow ? { personality: toPersonality(personalityRow) } : {}),
+    version: petRow.version,
+  };
+}
+
+function toPersonality(row: PersonalityRow): PersonalityState {
+  return createPersonalityState({
+    petId: row.petId,
+    traits: {
+      playful: row.playful,
+      curious: row.curious,
+      shy: row.shy,
+      independent: row.independent,
+      clingy: row.clingy,
+    },
+    daily: {
+      day: row.dailyDeltaDate,
+      deltas: {
+        playful: row.playfulDailyDelta,
+        curious: row.curiousDailyDelta,
+        shy: row.shyDailyDelta,
+        independent: row.independentDailyDelta,
+        clingy: row.clingyDailyDelta,
+      },
+    },
+    lastIndependentSignalDay: row.independentSignalDate,
+  });
 }
 
 function toPet(row: PetRow): Pet {

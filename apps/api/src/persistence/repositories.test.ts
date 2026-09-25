@@ -1,9 +1,12 @@
 import {
+  applyPersonalitySignal,
   createDomainEvent,
   createEgg,
+  createInitialPersonality,
   createInitialPetState,
   hatchPet,
   namePet,
+  SequenceRandom,
   type EggPet,
   type PetState,
 } from '@ai-virtual-pet/domain';
@@ -30,6 +33,19 @@ interface Repositories {
   readonly events: EventRepository;
 }
 
+function newPersonality(id = 'pet-1') {
+  return createInitialPersonality(id, new SequenceRandom([0.1, 0.2, 0.3, 0.4, 0.5]));
+}
+
+/** Hatches the stored Egg and saves the Baby with `personality` (version 0 → 1). */
+async function saveBabyWithPersonality(pets: PetRepository, personality = newPersonality()) {
+  const { egg, state } = newEgg();
+  await pets.create(egg, state);
+  const baby = hatchPet(egg, minutes(1));
+  const saved = await pets.save({ pet: baby, state, expectedVersion: 0, events: [], personality });
+  return { baby, state, saved };
+}
+
 function newEgg(id = 'pet-1', at = createdAt): { egg: EggPet; state: PetState } {
   return { egg: createEgg({ id, createdAt: at }), state: createInitialPetState(id, at) };
 }
@@ -40,6 +56,68 @@ function repositoryContract(getRepositories: () => Repositories): void {
     const { pets } = getRepositories();
 
     expect(await pets.findCurrent()).toBeNull();
+  });
+
+  it('stores no personality for an Egg', async () => {
+    const { pets } = getRepositories();
+    const { egg, state } = newEgg();
+
+    expect((await pets.create(egg, state)).personality).toBeUndefined();
+    expect((await pets.findCurrent())?.personality).toBeUndefined();
+  });
+
+  it('saves and reloads personality with its daily deltas and signal day', async () => {
+    const { pets } = getRepositories();
+    const played = applyPersonalitySignal(newPersonality(), 'PLAY', minutes(5)).state;
+    const personality = { ...played, lastIndependentSignalDay: '2026-09-25' };
+
+    const { saved } = await saveBabyWithPersonality(pets, personality);
+
+    expect(saved.personality).toEqual(personality);
+    expect((await pets.findCurrent())?.personality).toEqual(personality);
+  });
+
+  it('updates a stored personality and keeps it when a save omits personality', async () => {
+    const { pets } = getRepositories();
+    const { baby, state } = await saveBabyWithPersonality(pets);
+    const updated = applyPersonalitySignal(newPersonality(), 'CURIOSITY', minutes(6)).state;
+
+    await pets.save({ pet: baby, state, expectedVersion: 1, events: [], personality: updated });
+    await pets.save({ pet: baby, state: { ...state, hunger: 40 }, expectedVersion: 2, events: [] });
+
+    expect(await pets.findCurrent()).toMatchObject({ version: 3, state: { hunger: 40 }, personality: updated });
+  });
+
+  it('does not write personality when the version check fails', async () => {
+    const { pets } = getRepositories();
+    const { baby, state, saved } = await saveBabyWithPersonality(pets);
+    const stale = applyPersonalitySignal(newPersonality(), 'PLAY', minutes(6)).state;
+
+    await expect(
+      pets.save({ pet: baby, state, expectedVersion: 0, events: [], personality: stale }),
+    ).rejects.toBeInstanceOf(ConcurrencyError);
+    expect((await pets.findCurrent())?.personality).toEqual(saved.personality);
+  });
+
+  it('rejects a personality that belongs to another pet', async () => {
+    const { pets } = getRepositories();
+    const { egg, state } = newEgg();
+    await pets.create(egg, state);
+
+    await expect(
+      pets.save({ pet: egg, state, expectedVersion: 0, events: [], personality: newPersonality('pet-2') }),
+    ).rejects.toThrow(RangeError);
+  });
+
+  it('removes personality with the pet on deleteAll', async () => {
+    const { pets } = getRepositories();
+    await saveBabyWithPersonality(pets);
+
+    await pets.deleteAll();
+    const { egg, state } = newEgg();
+    await pets.create(egg, state);
+
+    expect((await pets.findCurrent())?.personality).toBeUndefined();
   });
 
   it('creates and loads an Egg with its initial state', async () => {
@@ -267,6 +345,38 @@ describe.skipIf(!databaseUrl)('Drizzle repositories (PostgreSQL)', () => {
     ).rejects.toThrow();
 
     expect(await pets.findCurrent()).toMatchObject({ version: 0, state: { hunger: state.hunger } });
+  });
+
+  it('rolls back personality when event insertion fails', async () => {
+    const pets = new DrizzlePetRepository(connection.db);
+    const { baby, state, saved } = await saveBabyWithPersonality(pets);
+
+    await expect(
+      pets.save({
+        pet: baby,
+        state,
+        expectedVersion: 1,
+        events: [createDomainEvent('PET_FED', new Date(Number.NaN))],
+        personality: applyPersonalitySignal(newPersonality(), 'PLAY', minutes(6)).state,
+      }),
+    ).rejects.toThrow();
+
+    expect((await pets.findCurrent())?.personality).toEqual(saved.personality);
+  });
+
+  it.each([
+    ['trait above range', sql`update pet_personalities set playful = 0.96`],
+    ['trait below range', sql`update pet_personalities set shy = 0.04`],
+    ['Independent + Clingy above 1.40', sql`update pet_personalities set independent = 0.9, clingy = 0.6`],
+  ])('rejects personality %s at the database level', async (_label, statement) => {
+    await saveBabyWithPersonality(new DrizzlePetRepository(connection.db));
+
+    const error: unknown = await connection.db.execute(statement).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({ cause: { code: '23514' } });
   });
 
   it.each([

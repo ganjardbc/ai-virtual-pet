@@ -3,18 +3,27 @@ import { randomUUID } from 'node:crypto';
 import type { ActionResult, ActionType, PetSnapshot } from '@ai-virtual-pet/contracts';
 import {
   DEFAULT_GAME_RULES,
+  DEFAULT_PERSONALITY_RULES,
+  applyAutonomousIndependentSignal,
   applyFeed,
+  applyPersonalitySignal,
   applyPlay,
   createDomainEvent,
+  createInitialPersonality,
   createEgg,
   createInitialPetState,
+  hasQualifyingAutonomousActivity,
   hatchPet,
   namePet,
   startSleep,
+  SystemRandom,
   type ActionResult as DomainActionResult,
   type Clock,
   type DomainEvent,
   type GameRules,
+  type PersonalityRules,
+  type PersonalitySignal,
+  type PersonalityState,
   type Pet,
   type PetState,
   type Random,
@@ -42,6 +51,12 @@ export interface PetServiceDependencies {
   readonly clock: Clock;
   readonly random: Random;
   readonly rules?: GameRules;
+  readonly personalityRules?: PersonalityRules;
+  /**
+   * Draws new personalities. Separate from `random` so creating a personality never shifts the
+   * simulation's random sequence. Defaults to `SystemRandom`; tests inject a deterministic one.
+   */
+  readonly personalityRandom?: Random;
   readonly createId?: () => string;
   readonly maxAttempts?: number;
 }
@@ -50,6 +65,8 @@ export interface PetServiceDependencies {
 export interface Loaded {
   readonly aggregate: PetAggregate;
   readonly state: PetState;
+  /** Null only for an Egg. A Baby stored without one is given one on load. */
+  readonly personality: PersonalityState | null;
   readonly now: Date;
 }
 
@@ -58,8 +75,16 @@ export interface Mutation<T> {
   readonly pet: Pet;
   readonly state: PetState;
   readonly events: readonly DomainEvent[];
+  /** Omitted: keep the loaded personality. */
+  readonly personality?: PersonalityState;
   readonly result: (snapshot: PetSnapshot) => T | Promise<T>;
 }
+
+/** Personality signal caused by an accepted care action (plan Tasks 2.5–2.6). Sleep has none. */
+const ACTION_PERSONALITY_SIGNAL: Readonly<Partial<Record<ActionType, PersonalitySignal>>> = {
+  PLAY: 'PLAY',
+  FEED: 'CARE',
+};
 
 /**
  * Application orchestration for the single prototype pet:
@@ -68,11 +93,15 @@ export interface Mutation<T> {
  */
 export class PetService {
   protected readonly rules: GameRules;
+  protected readonly personalityRules: PersonalityRules;
+  private readonly personalityRandom: Random;
   private readonly createId: () => string;
   private readonly maxAttempts: number;
 
   constructor(protected readonly deps: PetServiceDependencies) {
     this.rules = deps.rules ?? DEFAULT_GAME_RULES;
+    this.personalityRules = deps.personalityRules ?? DEFAULT_PERSONALITY_RULES;
+    this.personalityRandom = deps.personalityRandom ?? new SystemRandom();
     this.createId = deps.createId ?? randomUUID;
     this.maxAttempts = deps.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   }
@@ -117,6 +146,7 @@ export class PetService {
         pet: baby,
         // Time spent as an Egg does not cost needs: the Baby starts fresh at hatch time.
         state: createInitialPetState(baby.id, now, this.rules),
+        personality: this.newPersonality(baby.id),
         events: [createDomainEvent('PET_HATCHED', now)],
         result: (snapshot) => snapshot,
       };
@@ -141,17 +171,20 @@ export class PetService {
   }
 
   async act(type: ActionType): Promise<ActionResult> {
-    return this.mutate(async ({ aggregate, state, now }) => {
-      if (aggregate.pet.stage === 'EGG') {
+    return this.mutate(async ({ aggregate, state, personality, now }) => {
+      if (aggregate.pet.stage === 'EGG' || !personality) {
         throw invalidStage('An Egg cannot receive care actions.');
       }
 
       const outcome = await this.applyAction(type, aggregate, state, now);
+      const signal = outcome.accepted ? ACTION_PERSONALITY_SIGNAL[type] : undefined;
 
       return {
         pet: aggregate.pet,
         state: outcome.state,
         events: outcome.events,
+        // Only an accepted action shapes personality; a rejected Play teaches nothing.
+        personality: signal ? applyPersonalitySignal(personality, signal, now, this.personalityRules).state : personality,
         result: (snapshot): ActionResult =>
           outcome.accepted
             ? {
@@ -203,10 +236,15 @@ export class PetService {
       const aggregate = await this.requireCurrent();
       const now = this.deps.clock.now();
       const simulated = this.simulate(aggregate, now);
-      const mutation = await operation({ aggregate, state: simulated.state, now });
+      const personality = this.loadPersonality(aggregate, simulated.events, now);
+      const mutation = await operation({ aggregate, state: simulated.state, personality, now });
       const events = [...simulated.events, ...mutation.events];
+      const nextPersonality = mutation.personality ?? personality;
       const changed =
-        events.length > 0 || mutation.pet !== aggregate.pet || mutation.state !== aggregate.state;
+        events.length > 0 ||
+        mutation.pet !== aggregate.pet ||
+        mutation.state !== aggregate.state ||
+        nextPersonality !== (aggregate.personality ?? null);
 
       try {
         const saved = changed
@@ -215,6 +253,7 @@ export class PetService {
               state: mutation.state,
               expectedVersion: aggregate.version,
               events,
+              ...(nextPersonality ? { personality: nextPersonality } : {}),
             })
           : aggregate;
 
@@ -229,6 +268,31 @@ export class PetService {
         }
       }
     }
+  }
+
+  /**
+   * The pet's personality for this operation: initialized for a Baby stored before personality
+   * existed (lazy migration), plus the autonomous Independent signal. One simulation run grants at
+   * most one signal however many days elapsed, and the domain limits it to once per day.
+   */
+  private loadPersonality(
+    aggregate: PetAggregate,
+    simulatedEvents: readonly DomainEvent[],
+    now: Date,
+  ): PersonalityState | null {
+    if (aggregate.pet.stage === 'EGG') {
+      return null;
+    }
+
+    const personality = aggregate.personality ?? this.newPersonality(aggregate.pet.id);
+
+    return hasQualifyingAutonomousActivity(simulatedEvents)
+      ? applyAutonomousIndependentSignal(personality, now, this.personalityRules).state
+      : personality;
+  }
+
+  private newPersonality(petId: string): PersonalityState {
+    return createInitialPersonality(petId, this.personalityRandom, this.personalityRules);
   }
 
   private simulate(aggregate: PetAggregate, now: Date): { state: PetState; events: readonly DomainEvent[] } {

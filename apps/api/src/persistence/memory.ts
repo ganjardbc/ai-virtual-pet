@@ -57,7 +57,7 @@ export class InMemoryStore implements PetRepository, EventRepository {
   }
 
   async save(input: SavePetInput): Promise<PetAggregate> {
-    assertStateBelongsToPet(input.pet, input.state);
+    assertStateBelongsToPet(input.pet, input.state, input.personality);
     const record = this.pets.get(input.pet.id);
 
     if (!record) {
@@ -68,9 +68,11 @@ export class InMemoryStore implements PetRepository, EventRepository {
       throw new ConcurrencyError(input.pet.id, input.expectedVersion);
     }
 
+    const personality = input.personality ?? record.aggregate.personality;
     const aggregate: PetAggregate = {
       pet: input.pet,
       state: input.state,
+      ...(personality ? { personality } : {}),
       version: input.expectedVersion + 1,
     };
     record.aggregate = structuredClone(aggregate);

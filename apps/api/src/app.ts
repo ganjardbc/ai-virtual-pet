@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Clock, GameRules, Random } from '@ai-virtual-pet/domain';
+import type { Clock, GameRules, PersonalityRules, Random } from '@ai-virtual-pet/domain';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { PetService } from './application/pet-service.js';
@@ -17,6 +17,9 @@ export interface AppDependencies {
   readonly clock: Clock;
   readonly random: Random;
   readonly rules?: GameRules;
+  readonly personalityRules?: PersonalityRules;
+  /** Draws new personalities; separate from `random` so it never shifts simulation. */
+  readonly personalityRandom?: Random;
   readonly logger?: boolean;
   /** Enables development-only debug routes. The game clock must then be this debug clock. */
   readonly debug?: { readonly clock: OffsetClock };

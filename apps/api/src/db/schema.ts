@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   check,
+  date,
   doublePrecision,
   index,
   integer,
@@ -85,5 +86,42 @@ export const events = pgTable(
   (table) => [
     index('events_pet_occurred_at_idx').on(table.petId, table.occurredAt),
     index('events_pet_type_occurred_at_idx').on(table.petId, table.type, table.occurredAt),
+  ],
+);
+
+// Personality evolves slowly, so one row per pet holds current traits plus today's applied
+// deltas for the daily cap. No history table (plan Task 2.1).
+export const petPersonalities = pgTable(
+  'pet_personalities',
+  {
+    petId: text('pet_id')
+      .primaryKey()
+      .references(() => pets.id, { onDelete: 'cascade' }),
+    playful: doublePrecision('playful').notNull(),
+    curious: doublePrecision('curious').notNull(),
+    shy: doublePrecision('shy').notNull(),
+    independent: doublePrecision('independent').notNull(),
+    clingy: doublePrecision('clingy').notNull(),
+    dailyDeltaDate: date('daily_delta_date', { mode: 'string' }),
+    playfulDailyDelta: doublePrecision('playful_daily_delta').notNull().default(0),
+    curiousDailyDelta: doublePrecision('curious_daily_delta').notNull().default(0),
+    shyDailyDelta: doublePrecision('shy_daily_delta').notNull().default(0),
+    independentDailyDelta: doublePrecision('independent_daily_delta').notNull().default(0),
+    clingyDailyDelta: doublePrecision('clingy_daily_delta').notNull().default(0),
+    independentSignalDate: date('independent_signal_date', { mode: 'string' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'pet_personalities_trait_range_check',
+      sql`${table.playful} between 0.05 and 0.95
+        and ${table.curious} between 0.05 and 0.95
+        and ${table.shy} between 0.05 and 0.95
+        and ${table.independent} between 0.05 and 0.95
+        and ${table.clingy} between 0.05 and 0.95`,
+    ),
+    // Tiny tolerance: traits are rounded to 6 decimals, so the sum can carry float noise.
+    check('pet_personalities_independent_clingy_check', sql`${table.independent} + ${table.clingy} <= 1.400001`),
   ],
 );
