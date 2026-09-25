@@ -1,0 +1,207 @@
+/* Debug layer: a developer tool, deliberately unlike the player UI (design system §44). */
+.debug {
+  --debug-bg: #1e2227;
+  --debug-surface: #272c33;
+  --debug-border: #3a414a;
+  --debug-text: #e7e3dc;
+  --debug-muted: #9aa3ad;
+  --debug-accent: #6fd0c6;
+  --debug-danger: #ff8a73;
+
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: var(--debug-bg);
+  color: var(--debug-text);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+@media (min-width: 900px) {
+  .debug {
+    inset: 0 0 0 auto;
+    width: 380px;
+    border-left: 1px solid var(--debug-border);
+    box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+  }
+}
+
+.debug__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.debug__title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.debug__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--debug-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--debug-text);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.debug__feedback {
+  min-height: 1.45em;
+  color: var(--debug-accent);
+}
+
+.debug__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--debug-border);
+}
+
+.debug__heading {
+  margin: 0;
+  color: var(--debug-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.debug__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.debug__row,
+.debug__stat {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.debug__row {
+  grid-template-columns: 140px 1fr;
+}
+
+.debug__stat {
+  grid-template-columns: 90px 64px 1fr auto;
+}
+
+.debug__key {
+  color: var(--debug-muted);
+}
+
+.debug__value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.debug__stat .debug__value {
+  text-align: right;
+}
+
+.debug__input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--debug-border);
+  border-radius: var(--radius-sm);
+  background: var(--debug-surface);
+  color: var(--debug-text);
+  font: inherit;
+}
+
+.debug__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.debug__commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.debug__button {
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--debug-border);
+  border-radius: var(--radius-sm);
+  background: var(--debug-surface);
+  color: var(--debug-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.debug__button:hover:not(:disabled) {
+  border-color: var(--debug-accent);
+}
+
+.debug__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.debug__button--danger {
+  border-color: rgb(255 138 115 / 50%);
+  color: var(--debug-danger);
+}
+
+.debug__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--debug-danger);
+  border-radius: var(--radius-sm);
+}
+
+.debug__confirm-title {
+  font-weight: 700;
+}
+
+.debug__events {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.debug__event summary {
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.debug__event time {
+  color: var(--debug-muted);
+}
+
+.debug__payload {
+  display: block;
+  margin: 2px 0 6px 12px;
+  color: var(--debug-accent);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.debug :focus-visible {
+  outline: 2px solid var(--debug-accent);
+  outline-offset: 1px;
+}

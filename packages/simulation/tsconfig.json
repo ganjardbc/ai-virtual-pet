@@ -1,0 +1,10 @@
+{
+  "extends": "../config/tsconfig.node.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@ai-virtual-pet/domain": ["../domain/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

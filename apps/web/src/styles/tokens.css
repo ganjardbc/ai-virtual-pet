@@ -1,0 +1,90 @@
+/* Semantic design tokens (docs/13-design-system.md). Components use these, never raw values. */
+:root {
+  /* Surface */
+  --color-surface-background: #18313d;
+  --color-surface-primary: #fffaf0;
+  --color-surface-secondary: #fff0cf;
+
+  /* Text */
+  --color-text-primary: #19333c;
+  --color-text-secondary: #49616a;
+  --color-text-muted: #687d83;
+  --color-text-inverse: #fffaf0;
+
+  /* Border */
+  --color-border-subtle: #eadab7;
+  --color-border-default: #d9c79e;
+
+  /* Interaction */
+  --color-action-primary: #ffb454;
+  --color-action-primary-hover: #ffc66f;
+  --color-action-primary-text: #18313d;
+  /* Coral dark enough for icons and graphics on light surfaces (≥ 3:1). */
+  --color-action-primary-strong: #dc653d;
+  --color-action-secondary: #45b8a5;
+  --color-action-secondary-soft: #dff6ed;
+  /* Teal dark enough for text on light and teal-soft surfaces (≥ 4.5:1). */
+  --color-action-secondary-strong: #226e66;
+  --color-action-disabled: #d8d0bc;
+  --color-focus: #fff4a3;
+
+  /* Semantic */
+  --color-semantic-critical: #b94b45;
+  --color-semantic-info: #278778;
+
+  /* Pet */
+  --pet-body: #9ce3cb;
+  --pet-body-shade: #62bea6;
+  --pet-outline: #214f4b;
+  --pet-leaf: #78c96b;
+  --pet-blush: #ff8f82;
+  --pet-ink: #18313d;
+  --egg-shell: #fff0c2;
+  --egg-spot: #66c8b4;
+
+  /* Habitat */
+  --habitat-bed: #ff9e8d;
+  --habitat-bed-shade: #d9665d;
+
+  /* Typography */
+  --font-display: 'Fredoka', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text-heading-md: 1.75rem;
+  --text-body-lg: 1.25rem;
+  --text-body-md: 1rem;
+  --text-body-sm: 0.9375rem;
+  --text-label: 0.875rem;
+  --text-caption: 0.8125rem;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing (4px scale) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* Elevation */
+  --shadow-low: 0 3px 0 rgb(24 49 61 / 12%), 0 8px 18px rgb(24 49 61 / 10%);
+  --shadow-medium: 0 5px 0 rgb(24 49 61 / 16%), 0 18px 40px rgb(4 25 34 / 20%);
+
+  /* Motion: UI restrained, pet expressive */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 600ms;
+  --ease-soft: cubic-bezier(0.3, 0.7, 0.4, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

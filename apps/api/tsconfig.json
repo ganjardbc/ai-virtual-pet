@@ -1,0 +1,21 @@
+{
+  "extends": "../../packages/config/tsconfig.node.json",
+  "compilerOptions": {
+    "paths": {
+      "@ai-virtual-pet/contracts": [
+        "../../packages/contracts/src/index.ts"
+      ],
+      "@ai-virtual-pet/domain": [
+        "../../packages/domain/src/index.ts"
+      ],
+      "@ai-virtual-pet/simulation": [
+        "../../packages/simulation/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "drizzle.config.ts",
+    "vitest.config.ts"
+  ]
+}

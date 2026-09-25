@@ -1,0 +1,47 @@
+import { randomUUID } from 'node:crypto';
+
+import type { Clock, GameRules, Random } from '@ai-virtual-pet/domain';
+import Fastify, { type FastifyInstance } from 'fastify';
+
+import { PetService } from './application/pet-service.js';
+import { registerDebugRoutes } from './debug/debug-routes.js';
+import { DebugPetService } from './debug/debug-service.js';
+import type { OffsetClock } from './debug/offset-clock.js';
+import { registerErrorHandling } from './http/error-handler.js';
+import { registerPetRoutes } from './http/pet-routes.js';
+import type { EventRepository, PetRepository } from './persistence/repositories.js';
+
+export interface AppDependencies {
+  readonly pets: PetRepository;
+  readonly events: EventRepository;
+  readonly clock: Clock;
+  readonly random: Random;
+  readonly rules?: GameRules;
+  readonly logger?: boolean;
+  /** Enables development-only debug routes. The game clock must then be this debug clock. */
+  readonly debug?: { readonly clock: OffsetClock };
+}
+
+export function buildApp(dependencies: AppDependencies): FastifyInstance {
+  const app = Fastify({
+    logger: dependencies.logger ?? false,
+    genReqId: () => randomUUID(),
+  });
+
+  registerErrorHandling(app);
+  app.get('/health', async () => ({ status: 'ok' as const }));
+
+  if (dependencies.debug) {
+    if (dependencies.clock !== dependencies.debug.clock) {
+      throw new Error('Debug mode requires the game clock to be the debug clock.');
+    }
+
+    const service = new DebugPetService({ ...dependencies, clock: dependencies.debug.clock });
+    registerPetRoutes(app, service);
+    registerDebugRoutes(app, service);
+  } else {
+    registerPetRoutes(app, new PetService(dependencies));
+  }
+
+  return app;
+}
