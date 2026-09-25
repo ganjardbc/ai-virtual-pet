@@ -45,7 +45,18 @@ export const chatActionSchema = z.discriminatedUnion('status', [
 ]);
 export type ChatAction = z.infer<typeof chatActionSchema>;
 
-/** Result of `POST /api/v1/pet/chat`. No provider output or debug metadata. */
+/**
+ * Result of `POST /api/v1/pet/chat`. No provider output or debug metadata.
+ *
+ * Client retry contract (plan Tasks 3.8, 7.16):
+ * - 200: turn complete. A repeated request with the same `clientMessageId` returns this same reply.
+ * - 503 `AI_UNAVAILABLE`, 500, or a network error: the player message may be stored. Retry with the
+ *   SAME `clientMessageId` and message; the server resumes the turn and never repeats an action,
+ *   Bond gain, or personality change.
+ * - 409 `CHAT_IN_PROGRESS`: a turn is still running; keep the pending id and retry later.
+ * - 409 `PET_SLEEPING`: Talk is unavailable; nothing was stored. Show the sleeping hint.
+ * - 400 `VALIDATION_ERROR`: fix the request; a new message needs a NEW `clientMessageId`.
+ */
 export const chatTurnResultSchema = z.object({
   message: chatMessageDtoSchema,
   intent: chatIntentSchema,

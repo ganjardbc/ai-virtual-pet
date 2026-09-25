@@ -72,6 +72,12 @@ export class FakeAIProvider implements AIProvider {
 
   async generateStructured<T>(request: AIStructuredRequest<T>): Promise<AIResult<T>> {
     this.requests.push(request as AIStructuredRequest<unknown>);
+
+    if (request.timeoutMs <= 0) {
+      // Like the real adapter: a spent turn budget never reaches the model.
+      return { ok: false, reason: 'TIMEOUT', detail: 'No time left in the turn budget.', usage: null };
+    }
+
     const outcome = this.queues[request.kind].shift() ?? this.defaults[request.kind];
 
     if (!outcome) {

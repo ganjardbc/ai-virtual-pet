@@ -6,6 +6,7 @@ import {
   chatActionSchema,
   chatIntentSchema,
   type ActionResult,
+  type ActionType,
   type ChatAction,
   type ChatRequest,
   type ChatTurnResult,
@@ -30,6 +31,8 @@ import {
   DuplicateMessageError,
   type Conversation,
   type ConversationRepository,
+  type EventRepository,
+  type StoredEvent,
   type MessageMetadata,
   type PetRepository,
   type StoredMessage,
@@ -55,6 +58,7 @@ export interface ChatServiceDependencies {
   /** Care actions and Talk go through the same service as the buttons (plan Task 7.5). */
   readonly petService: PetService;
   readonly pets: PetRepository;
+  readonly events: EventRepository;
   readonly conversations: ConversationRepository;
   readonly ai: AIProvider;
   readonly clock: Clock;
@@ -111,12 +115,16 @@ export class ChatService {
 
     const conversation = await this.conversation(loaded.pet.id);
     const user = existing?.user ?? (await this.appendUserMessage(conversation, request));
+    // A resumed turn may already have acted before the process failed to store the reply.
+    const executed = existing ? executedAction(await this.deps.events.listForTurn(loaded.pet.id, user.id)) : null;
 
-    return this.completeTurn(conversation, user, loaded);
+    return executed
+      ? this.completeResumedActionTurn(conversation, user, loaded, executed)
+      : this.completeTurn(conversation, user, loaded);
   }
 
   private async completeTurn(conversation: Conversation, user: StoredMessage, loaded: PetSnapshot): Promise<ChatTurnResult> {
-    const budget = new TurnBudget(this.deps.aiTimeouts ?? DEFAULT_AI_TIMEOUTS, this.deps.monotonicNow);
+    const budget = this.budget();
     const interpreted = await interpretMessage(
       this.deps.ai,
       { message: user.content, petName: loaded.pet.name },
@@ -134,7 +142,8 @@ export class ChatService {
           ...(signal === ACTION_PERSONALITY_SIGNAL[interpretation.intent] ? {} : { rejectedSignal: signal }),
         })
       : null;
-    const action = actionResult ? toChatAction(actionResult) : null;
+    const outcome = actionResult ? fromActionResult(actionResult) : null;
+    const action = outcome?.action ?? null;
     let snapshot = actionResult?.pet ?? loaded;
 
     const response = await generateCharacterResponse(
@@ -144,7 +153,7 @@ export class ChatService {
       budget.timeoutFor('RESPONSE'),
     );
 
-    const content = response.message ?? (actionResult ? fallbackReaction(actionResult) : null);
+    const content = response.message ?? (outcome ? fallbackReaction(outcome) : null);
 
     if (content === null) {
       // No action happened and the pet could not answer: say so honestly instead of faking a
@@ -175,13 +184,53 @@ export class ChatService {
       interpretationFallback: interpretation.fallbackUsed,
       interpretationFailure: interpreted.failure?.reason ?? null,
       action,
-      bondDelta: actionResult?.status === 'SUCCESS' ? actionResult.changes.bond : talkBondDelta,
+      bondDelta: outcome ? outcome.bondDelta : talkBondDelta,
       fallbackUsed: response.message === null,
       responseFailure: response.failure?.reason ?? null,
       ...usageMetadata(interpreted, response, this.deps.ai),
     });
 
     return { message: toChatMessageDto(reply), intent: interpretation.intent, action, pet: snapshot };
+  }
+
+  /**
+   * The action of this turn already committed; only the reply is missing (e.g. the process failed
+   * before storing it). Never interpret or act again — react to what actually happened.
+   */
+  private async completeResumedActionTurn(
+    conversation: Conversation,
+    user: StoredMessage,
+    snapshot: PetSnapshot,
+    outcome: ActionOutcome,
+  ): Promise<ChatTurnResult> {
+    const response = await generateCharacterResponse(
+      this.deps.ai,
+      await this.characterContext(conversation, user, snapshot),
+      outcome.action,
+      this.budget().timeoutFor('RESPONSE'),
+    );
+    const reply = await this.appendReply(conversation, user, response.message ?? fallbackReaction(outcome), {
+      intent: outcome.action.type,
+      rawIntent: outcome.action.type,
+      intentConfidence: null,
+      classification: null,
+      resumedAction: true,
+      action: outcome.action,
+      bondDelta: outcome.bondDelta,
+      fallbackUsed: response.message === null,
+      responseFailure: response.failure?.reason ?? null,
+      provider: this.deps.ai.name,
+      model: this.deps.ai.model,
+      latencyMs: response.usage?.latencyMs ?? 0,
+      inputTokens: response.usage?.inputTokens ?? null,
+      outputTokens: response.usage?.outputTokens ?? null,
+    });
+
+    return { message: toChatMessageDto(reply), intent: outcome.action.type, action: outcome.action, pet: snapshot };
+  }
+
+  private budget(): TurnBudget {
+    return new TurnBudget(this.deps.aiTimeouts ?? DEFAULT_AI_TIMEOUTS, this.deps.monotonicNow);
   }
 
   private async findExistingTurn(petId: string, request: ChatRequest) {
@@ -267,15 +316,70 @@ export class ChatService {
   }
 }
 
-function toChatAction(result: ActionResult): ChatAction {
+/** What a care action did this turn, enough to describe it and to pick fallback words. */
+interface ActionOutcome {
+  readonly action: ChatAction;
+  readonly changes: { readonly hunger: number; readonly happiness: number } | null;
+  readonly bondDelta: number;
+}
+
+function fromActionResult(result: ActionResult): ActionOutcome {
   return result.status === 'SUCCESS'
-    ? { type: result.action.type, status: 'SUCCESS' }
-    : { type: result.action.type, status: 'REJECTED', reason: result.reason };
+    ? {
+        action: { type: result.action.type, status: 'SUCCESS' },
+        changes: { hunger: result.changes.hunger, happiness: result.changes.happiness },
+        bondDelta: result.changes.bond,
+      }
+    : { action: { type: result.action.type, status: 'REJECTED', reason: result.reason }, changes: null, bondDelta: 0 };
+}
+
+const SUCCESS_EVENT_ACTION: Readonly<Partial<Record<StoredEvent['type'], ActionType>>> = {
+  PET_FED: 'FEED',
+  PET_PLAYED: 'PLAY',
+  PET_STARTED_SLEEPING: 'SLEEP',
+};
+
+/** Rebuilds a committed action from the events tagged with its turn, if there is one. */
+function executedAction(events: readonly StoredEvent[]): ActionOutcome | null {
+  const number = (value: unknown) => (typeof value === 'number' ? value : 0);
+
+  for (const event of events) {
+    const type = SUCCESS_EVENT_ACTION[event.type];
+
+    if (type) {
+      return {
+        action: { type, status: 'SUCCESS' },
+        changes: { hunger: number(event.payload.hungerDelta), happiness: number(event.payload.happinessDelta) },
+        bondDelta: number(event.payload.bondDelta),
+      };
+    }
+
+    const rejected = chatActionSchema.safeParse({
+      type: event.payload.action,
+      status: 'REJECTED',
+      reason: event.payload.reason,
+    });
+
+    if (event.type === 'ACTION_REJECTED' && rejected.success) {
+      return { action: rejected.data, changes: null, bondDelta: 0 };
+    }
+  }
+
+  return null;
 }
 
 /** Same words as the button reaction for this result (plan Task 7.14). */
-function fallbackReaction(result: ActionResult): string {
-  const kind = actionReactionKind(result);
+function fallbackReaction(outcome: ActionOutcome): string {
+  const { action } = outcome;
+  const kind =
+    action.status === 'REJECTED'
+      ? actionReactionKind({ status: 'REJECTED', action: { type: action.type }, reason: action.reason })
+      : actionReactionKind({
+          status: 'SUCCESS',
+          action: { type: action.type },
+          changes: outcome.changes ?? { hunger: Number.POSITIVE_INFINITY, happiness: Number.POSITIVE_INFINITY },
+        });
+
   // SLEEPING is narration on the web, not speech; the pet just sounds unsure here.
   return ACTION_REACTION_TEXT[kind === 'SLEEPING' ? 'INVALID_STATE' : kind];
 }
