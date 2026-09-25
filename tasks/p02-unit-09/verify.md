@@ -36,3 +36,7 @@ Report: `live-character-eval-personality.md`.
 ## To Finish
 
 `AI_INTERPRETATION_TIMEOUT_MS=10000 pnpm ai:eval:character --groups STATE,MEMORY,INJECTION --out tasks/p02-unit-09/live-character-eval-truth.md` once 9router responds (`pnpm ai:smoke`).
+
+## Update — Model Testing Skipped
+
+Per owner decision, further live model testing is skipped for now. The truth corpus (state / memory / injection) remains unrun live; run it later with the command above. Partial `ag/gemini-3.8-flash-low` probe: 6 successful interpretations at 1.5–2.8 s (fits the 5 s timeout) before its per-model quota was hit. Eval scripts now wait ~2 min and retry once on a rate-limited call (`ai/evaluation/rate-limit.ts`).

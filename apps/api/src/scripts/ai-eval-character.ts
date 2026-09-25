@@ -18,6 +18,8 @@ if (!provider.available) {
   process.exit(1);
 }
 
+// 9router model quotas reset after about two minutes.
+const RATE_LIMIT_WAIT_MS = 125_000;
 const outIndex = process.argv.indexOf('--out');
 const outPath = outIndex >= 0 ? process.argv[outIndex + 1] : undefined;
 const groupsIndex = process.argv.indexOf('--groups');
@@ -27,6 +29,8 @@ const results = await runCharacterEvaluation(provider, {
   responseTimeoutMs: config.timeouts.responseMs,
   interpretationTimeoutMs: config.timeouts.interpretationMs,
   ...(groups ? { groups } : {}),
+  rateLimitWaitMs: RATE_LIMIT_WAIT_MS,
+  onRateLimitWait: (ms) => console.error(`rate limited — waiting ${ms / 1000} s, then retrying once`),
   onCase: (result, index, total) => {
     const status = result.failure ? 'FAILED' : result.flags.length ? `FLAG ${result.flags.map((flag) => flag.check).join(',')}` : 'ok';
     console.error(`[${index + 1}/${total}] ${result.id} ${status}`);

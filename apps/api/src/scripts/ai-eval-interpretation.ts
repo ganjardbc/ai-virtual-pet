@@ -1,7 +1,11 @@
 import { createAIProvider, loadAIConfig } from '../ai/config.js';
 import { INTERPRETATION_CORPUS, scoreInterpretation, type CorpusVerdict } from '../ai/interpretation-corpus.js';
 import { interpretMessage } from '../ai/interpretation.js';
+import { retryAfterRateLimit } from '../ai/evaluation/rate-limit.js';
 import { loadEnv } from '../config/env.js';
+
+// 9router model quotas reset after about two minutes.
+const RATE_LIMIT_WAIT_MS = 125_000;
 
 /**
  * Opt-in live interpretation evaluation (plan Task 5.8). Runs the corpus once against the
@@ -25,10 +29,11 @@ console.log(`model: ${provider.model} (json mode: ${config.jsonMode})\n`);
 console.log(['verdict', 'group', 'expected', 'raw', 'acts on', 'conf', 'class', 'ms', 'message'].join('\t'));
 
 for (const testCase of INTERPRETATION_CORPUS) {
-  const outcome = await interpretMessage(
-    provider,
-    { message: testCase.message, petName: 'Momo' },
-    config.timeouts.interpretationMs,
+  const outcome = await retryAfterRateLimit(
+    () => interpretMessage(provider, { message: testCase.message, petName: 'Momo' }, config.timeouts.interpretationMs),
+    (result) => result.failure?.reason === 'PROVIDER_ERROR',
+    RATE_LIMIT_WAIT_MS,
+    (ms) => console.error(`rate limited — waiting ${ms / 1000} s, then retrying once`),
   );
   const { interpretation } = outcome;
   const verdict = scoreInterpretation(testCase.expected, interpretation);

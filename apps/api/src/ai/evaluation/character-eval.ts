@@ -6,6 +6,7 @@ import { generateCharacterResponse } from '../character-response.js';
 import { interpretMessage, isCareIntent, type Interpretation } from '../interpretation.js';
 import type { AIProvider } from '../provider.js';
 import { checkReply, type CheckFlag, type ReplyExpectation } from './character-checks.js';
+import { retryAfterRateLimit } from './rate-limit.js';
 import {
   PERSONALITY_PROFILES,
   PERSONALITY_PROMPTS,
@@ -36,6 +37,9 @@ export interface EvaluationCase {
 export interface EvaluationOptions {
   readonly responseTimeoutMs: number;
   readonly interpretationTimeoutMs: number;
+  /** Wait this long and retry once when the router rejects a call (rate limit). 0 = no retry. */
+  readonly rateLimitWaitMs?: number;
+  readonly onRateLimitWait?: (waitMs: number) => void;
   /** Run only these groups (e.g. to re-run after a provider outage). All when absent. */
   readonly groups?: readonly EvaluationCase['group'][];
   /** Progress callback for long runs. */
@@ -74,9 +78,11 @@ export async function runCharacterEvaluation(provider: AIProvider, options: Eval
   const results: EvaluationCase[] = [];
 
   for (const [index, planned] of cases.entries()) {
+    const paced = <T extends { failure: { reason: string } | null }>(call: () => Promise<T>) =>
+      retryAfterRateLimit(call, (result) => result.failure?.reason === 'PROVIDER_ERROR', options.rateLimitWaitMs ?? 0, options.onRateLimitWait);
     const interpreted =
       planned.group === 'INJECTION'
-        ? await interpretMessage(provider, { message: planned.message, petName: 'Momo' }, options.interpretationTimeoutMs)
+        ? await paced(() => interpretMessage(provider, { message: planned.message, petName: 'Momo' }, options.interpretationTimeoutMs))
         : null;
     const context = buildCharacterContext({
       snapshot: evaluationSnapshot(planned.reality),
@@ -84,7 +90,7 @@ export async function runCharacterEvaluation(provider: AIProvider, options: Eval
       messages: [],
       currentMessage: { content: planned.message },
     });
-    const response = await generateCharacterResponse(provider, context, planned.action, options.responseTimeoutMs);
+    const response = await paced(() => generateCharacterResponse(provider, context, planned.action, options.responseTimeoutMs));
     const flags = response.message ? checkReply(response.message, { indonesian: true, ...planned.expect }) : [];
 
     if (interpreted && isCareIntent(interpreted.interpretation.intent)) {
