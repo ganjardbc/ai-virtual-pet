@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ApiError, ConnectionError } from '../api/client';
 import { makeSnapshot } from '../testing/snapshot';
-import { chatFailure, composeMessage, counterText, pendingTurnReducer, shouldSendOnKey, type PendingTurn } from './chat';
+import { chatFailure, composeMessage, counterText, newClientMessageId, pendingTurnReducer, shouldSendOnKey, type PendingTurn } from './chat';
 import { reactionForChat } from './reactions';
 
 const send = { type: 'SEND', clientMessageId: 'id-1', message: 'Main yuk!' } as const;
@@ -55,6 +55,31 @@ describe('composing', () => {
   it('shows the counter only near the limit', () => {
     expect(counterText(100)).toBeNull();
     expect(counterText(800)).toBe('800/1000');
+  });
+});
+
+describe('newClientMessageId', () => {
+  const v4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('uses crypto.randomUUID when it exists (secure context)', () => {
+    expect(newClientMessageId()).toMatch(v4);
+  });
+
+  it('falls back to getRandomValues when randomUUID is missing (plain HTTP)', () => {
+    // crypto.randomUUID is only defined in secure contexts; a HTTP deployment on an IP has none.
+    const original = crypto.randomUUID;
+    // @ts-expect-error -- simulate the insecure-context API surface.
+    crypto.randomUUID = undefined;
+
+    try {
+      const first = newClientMessageId();
+      const second = newClientMessageId();
+
+      expect(first).toMatch(v4);
+      expect(first).not.toBe(second);
+    } finally {
+      crypto.randomUUID = original;
+    }
   });
 });
 

@@ -14,6 +14,7 @@ import {
   chatFailure,
   composeMessage,
   counterText,
+  newClientMessageId,
   pendingTurnReducer,
   shouldSendOnKey,
   type PendingTurn,
@@ -113,7 +114,7 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
       return;
     }
 
-    const turn: PendingTurn = { clientMessageId: crypto.randomUUID(), message: composed.text, status: 'sending' };
+    const turn: PendingTurn = { clientMessageId: newClientMessageId(), message: composed.text, status: 'sending' };
     dispatch({ type: 'SEND', clientMessageId: turn.clientMessageId, message: turn.message });
     setDraft('');
     submit(turn);

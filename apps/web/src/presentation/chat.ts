@@ -44,6 +44,28 @@ export function composeMessage(draft: string): ComposedMessage {
   return { text, valid: text.length > 0 && text.length <= CHAT_MESSAGE_MAX_LENGTH };
 }
 
+/**
+ * A fresh `clientMessageId` for one player turn.
+ *
+ * `crypto.randomUUID` only exists in secure contexts (HTTPS or localhost), so a deployment served
+ * over plain HTTP on an IP or LAN host would have Send throw and silently do nothing. Random
+ * values are still available there via `crypto.getRandomValues`, so fall back to building an
+ * RFC 4122 version-4 UUID from those bytes.
+ */
+export function newClientMessageId(): string {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'));
+
+  return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
+}
+
 /** Enter sends; Shift+Enter is a new line; Enter that confirms an IME composition never sends. */
 export function shouldSendOnKey(key: { readonly key: string; readonly shiftKey: boolean; readonly isComposing: boolean }): boolean {
   return key.key === 'Enter' && !key.shiftKey && !key.isComposing;
