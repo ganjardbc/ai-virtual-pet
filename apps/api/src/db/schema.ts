@@ -10,6 +10,8 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
@@ -123,5 +125,54 @@ export const petPersonalities = pgTable(
     ),
     // Tiny tolerance: traits are rounded to 6 decimals, so the sum can carry float noise.
     check('pet_personalities_independent_clingy_check', sql`${table.independent} + ${table.clingy} <= 1.400001`),
+  ],
+);
+
+// One default conversation per pet (plan Task 3.1). Chat history is not Memory.
+export const conversations = pgTable('conversations', {
+  id: text('id').primaryKey(),
+  petId: text('pet_id')
+    .notNull()
+    .unique()
+    .references(() => pets.id, { onDelete: 'cascade' }),
+  createdAt: timestamptz('created_at').notNull(),
+  updatedAt: timestamptz('updated_at').notNull(),
+});
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    content: text('content').notNull(),
+    // Idempotency key of a player turn: a retry resends the same value (plan Task 3.8).
+    clientMessageId: text('client_message_id'),
+    // The player message an assistant message answers.
+    replyToMessageId: bigint('reply_to_message_id', { mode: 'number' }).references((): AnyPgColumn => messages.id, {
+      onDelete: 'cascade',
+    }),
+    // Turn observability for debugging (intent, provider, latency…). Never prompts or reasoning.
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamptz('created_at').notNull(),
+  },
+  (table) => [
+    index('messages_conversation_created_at_idx').on(table.conversationId, table.createdAt, table.id),
+    uniqueIndex('messages_client_message_id_unique')
+      .on(table.conversationId, table.clientMessageId)
+      .where(sql`${table.clientMessageId} is not null`),
+    // At most one reply per player turn.
+    uniqueIndex('messages_reply_to_message_id_unique')
+      .on(table.replyToMessageId)
+      .where(sql`${table.replyToMessageId} is not null`),
+    check('messages_role_check', sql`${table.role} in ('USER', 'ASSISTANT')`),
+    check('messages_content_check', sql`char_length(${table.content}) > 0`),
+    check(
+      'messages_turn_link_check',
+      sql`(${table.role} = 'USER' and ${table.clientMessageId} is not null and ${table.replyToMessageId} is null)
+        or (${table.role} = 'ASSISTANT' and ${table.clientMessageId} is null and ${table.replyToMessageId} is not null)`,
+    ),
   ],
 );

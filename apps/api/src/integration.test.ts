@@ -1,6 +1,7 @@
 import {
   actionResultSchema,
   apiErrorEnvelopeSchema,
+  chatHistorySchema,
   debugCommandResultSchema,
   debugStateSchema,
   petSnapshotSchema,
@@ -24,9 +25,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import type { DatabaseConnection } from './db/client.js';
 import { OffsetClock } from './debug/offset-clock.js';
-import { DrizzleEventRepository, DrizzlePetRepository } from './persistence/drizzle.js';
+import {
+  DrizzleConversationRepository,
+  DrizzleEventRepository,
+  DrizzlePetRepository,
+} from './persistence/drizzle.js';
 import { InMemoryStore } from './persistence/memory.js';
-import type { EventRepository, PetRepository } from './persistence/repositories.js';
+import type { ConversationRepository, EventRepository, PetRepository } from './persistence/repositories.js';
 import { openTestDatabase, testDatabaseUrl, truncateAll } from './testing/database.js';
 
 const HOUR_MS = 60 * 60 * 1_000;
@@ -41,6 +46,7 @@ const debugCommandEnvelope = successEnvelopeSchema(debugCommandResultSchema);
 interface Repositories {
   readonly pets: PetRepository;
   readonly events: EventRepository;
+  readonly conversations: ConversationRepository;
 }
 
 /** A running API over given repositories, with a controllable clock (debug harness enabled). */
@@ -361,6 +367,58 @@ function integrationSuite(getRepositories: () => Repositories, reopen: () => Pro
     });
   });
 
+  describe('Prototype 0.2 conversation persistence (Unit 03)', () => {
+    const historyEnvelope = successEnvelopeSchema(chatHistorySchema);
+
+    async function history(target: Client = client) {
+      const response = await target.app.inject({ method: 'GET', url: '/api/v1/pet/chat/history' });
+      expect(response.statusCode, response.body).toBe(200);
+      return historyEnvelope.parse(response.json()).data.messages;
+    }
+
+    async function seedTurn(clientMessageId: string): Promise<void> {
+      const { conversations, pets } = getRepositories();
+      const petId = (await pets.findCurrent())?.pet.id ?? '';
+      const now = client.clock.now();
+      const conversation = await conversations.getOrCreateForPet({ id: `c-${petId}`, petId, createdAt: now, updatedAt: now });
+      const user = await conversations.appendMessage(conversation.id, {
+        role: 'USER',
+        content: 'Main yuk!',
+        clientMessageId,
+        createdAt: now,
+      });
+      await conversations.appendMessage(conversation.id, {
+        role: 'ASSISTANT',
+        content: 'Yay!',
+        replyToMessageId: user.id,
+        createdAt: now,
+      });
+    }
+
+    it('keeps conversation history across an API restart and a new connection', async () => {
+      await client.startNamedBaby();
+      await seedTurn('turn-1');
+      const before = await history();
+      await client.app.close();
+
+      const restarted = new Client(await reopen(), client.clock.now(), 12);
+
+      expect(await history(restarted)).toEqual(before);
+      expect(before.map((message) => message.content)).toEqual(['Main yuk!', 'Yay!']);
+      await restarted.app.close();
+    });
+
+    it('clears conversation history on debug reset', async () => {
+      await client.startNamedBaby();
+      await seedTurn('turn-1');
+
+      await client.app.inject({ method: 'POST', url: '/api/v1/debug/pet/reset' });
+      await client.startNamedBaby();
+
+      expect(await history()).toEqual([]);
+    });
+  });
+
   describe('8.6 sleep boundaries', () => {
     const wakeEvent = (snapshot: PetSnapshot) => snapshot.recentEvents.find((event) => event.type === 'PET_WOKE_UP');
 
@@ -435,8 +493,8 @@ describe('Integration (in-memory store)', () => {
   });
 
   integrationSuite(
-    () => ({ pets: store, events: store }),
-    async () => ({ pets: store, events: store }),
+    () => ({ pets: store, events: store, conversations: store }),
+    async () => ({ pets: store, events: store, conversations: store }),
   );
 });
 
@@ -459,12 +517,20 @@ describe.skipIf(!databaseUrl)('Integration (PostgreSQL)', () => {
   });
 
   integrationSuite(
-    () => ({ pets: new DrizzlePetRepository(connection.db), events: new DrizzleEventRepository(connection.db) }),
+    () => ({
+      pets: new DrizzlePetRepository(connection.db),
+      events: new DrizzleEventRepository(connection.db),
+      conversations: new DrizzleConversationRepository(connection.db),
+    }),
     async () => {
       // A separate connection pool stands in for a restarted API process.
       const reopened = await openTestDatabase(databaseUrl as string);
       extraConnections.push(reopened);
-      return { pets: new DrizzlePetRepository(reopened.db), events: new DrizzleEventRepository(reopened.db) };
+      return {
+        pets: new DrizzlePetRepository(reopened.db),
+        events: new DrizzleEventRepository(reopened.db),
+        conversations: new DrizzleConversationRepository(reopened.db),
+      };
     },
   );
 });

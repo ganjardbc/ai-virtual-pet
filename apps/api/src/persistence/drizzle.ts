@@ -12,18 +12,28 @@ import {
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 
 import type { Database } from '../db/client.js';
-import { events, petPersonalities, pets, petStates } from '../db/schema.js';
+import { conversations, events, messages, petPersonalities, pets, petStates } from '../db/schema.js';
 import {
   ConcurrencyError,
+  ConversationNotFoundError,
+  DuplicateMessageError,
   PetAlreadyExistsError,
   PetNotFoundError,
+  assertMessageContent,
   assertStateBelongsToPet,
+  type Conversation,
+  type ConversationRepository,
+  type ConversationTurn,
   type EventQuery,
   type EventRepository,
   type PetAggregate,
   type PetRepository,
+  type MessageQuery,
+  type MessageRole,
+  type NewMessage,
   type SavePetInput,
   type StoredEvent,
+  type StoredMessage,
 } from './repositories.js';
 
 /** Arbitrary application-wide advisory lock key guarding single-pet creation. */
@@ -33,6 +43,11 @@ type PetRow = typeof pets.$inferSelect;
 type PetStateRow = typeof petStates.$inferSelect;
 type EventRow = typeof events.$inferSelect;
 type PersonalityRow = typeof petPersonalities.$inferSelect;
+type ConversationRow = typeof conversations.$inferSelect;
+type MessageRow = typeof messages.$inferSelect;
+
+const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export class DrizzlePetRepository implements PetRepository {
@@ -103,7 +118,7 @@ export class DrizzlePetRepository implements PetRepository {
   }
 
   async deleteAll(): Promise<void> {
-    // pet_states, pet_personalities, and events cascade.
+    // pet_states, pet_personalities, events, conversations, and messages cascade.
     await this.db.delete(pets);
   }
 }
@@ -131,6 +146,117 @@ export class DrizzleEventRepository implements EventRepository {
 
     return rows.map((row) => row.occurredAt);
   }
+}
+
+export class DrizzleConversationRepository implements ConversationRepository {
+  constructor(private readonly db: Database) {}
+
+  async findForPet(petId: PetId): Promise<Conversation | null> {
+    const [row] = await this.db.select().from(conversations).where(eq(conversations.petId, petId));
+    return row ? toConversation(row) : null;
+  }
+
+  async getOrCreateForPet(candidate: Conversation): Promise<Conversation> {
+    try {
+      // The unique pet_id makes a concurrent second insert a no-op; both callers then read the winner.
+      await this.db.insert(conversations).values(candidate).onConflictDoNothing({ target: conversations.petId });
+    } catch (error) {
+      if (hasPostgresCode(error, FOREIGN_KEY_VIOLATION)) {
+        throw new PetNotFoundError(candidate.petId);
+      }
+
+      throw error;
+    }
+
+    const existing = await this.findForPet(candidate.petId);
+
+    if (!existing) {
+      throw new PetNotFoundError(candidate.petId);
+    }
+
+    return existing;
+  }
+
+  async appendMessage(conversationId: string, message: NewMessage): Promise<StoredMessage> {
+    assertMessageContent(message.content);
+
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [conversation] = await tx
+          .update(conversations)
+          .set({ updatedAt: message.createdAt })
+          .where(eq(conversations.id, conversationId))
+          .returning({ id: conversations.id });
+
+        if (!conversation) {
+          throw new ConversationNotFoundError(conversationId);
+        }
+
+        if (message.role === 'ASSISTANT') {
+          const [target] = await tx
+            .select({ role: messages.role })
+            .from(messages)
+            .where(and(eq(messages.id, message.replyToMessageId), eq(messages.conversationId, conversationId)));
+
+          if (target?.role !== 'USER') {
+            throw new RangeError(`Message ${message.replyToMessageId} is not a player message in this conversation.`);
+          }
+        }
+
+        const [row] = await tx
+          .insert(messages)
+          .values({
+            conversationId,
+            role: message.role,
+            content: message.content,
+            clientMessageId: message.role === 'USER' ? message.clientMessageId : null,
+            replyToMessageId: message.role === 'ASSISTANT' ? message.replyToMessageId : null,
+            metadata: message.role === 'ASSISTANT' ? { ...message.metadata } : {},
+            createdAt: message.createdAt,
+          })
+          .returning();
+
+        return toStoredMessage(required(row));
+      });
+    } catch (error) {
+      if (hasPostgresCode(error, UNIQUE_VIOLATION)) {
+        throw new DuplicateMessageError(conversationId);
+      }
+
+      throw error;
+    }
+  }
+
+  async findTurn(conversationId: string, clientMessageId: string): Promise<ConversationTurn | null> {
+    const [user] = await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.clientMessageId, clientMessageId)));
+
+    if (!user) {
+      return null;
+    }
+
+    const [reply] = await this.db.select().from(messages).where(eq(messages.replyToMessageId, user.id));
+    return { user: toStoredMessage(user), reply: reply ? toStoredMessage(reply) : null };
+  }
+
+  async listRecentMessages(conversationId: string, query: MessageQuery): Promise<StoredMessage[]> {
+    const rows = await this.db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(query.limit);
+
+    return rows.reverse().map(toStoredMessage);
+  }
+}
+
+/** Drizzle wraps driver errors, so the PostgreSQL code may be on the error or its `cause`. */
+function hasPostgresCode(error: unknown, code: string): boolean {
+  const codeOf = (value: unknown) => (value as { code?: unknown } | null)?.code;
+  return codeOf(error) === code || codeOf((error as { cause?: unknown } | null)?.cause) === code;
 }
 
 async function upsertPersonality(tx: Transaction, personality: PersonalityState, now: Date): Promise<PersonalityRow> {
@@ -272,6 +398,23 @@ function toStoredEvent(row: EventRow): StoredEvent {
     type: row.type as DomainEventType,
     occurredAt: row.occurredAt,
     payload: row.data,
+  };
+}
+
+function toConversation(row: ConversationRow): Conversation {
+  return { id: row.id, petId: row.petId, createdAt: row.createdAt, updatedAt: row.updatedAt };
+}
+
+function toStoredMessage(row: MessageRow): StoredMessage {
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    role: row.role as MessageRole,
+    content: row.content,
+    clientMessageId: row.clientMessageId,
+    replyToMessageId: row.replyToMessageId,
+    metadata: row.metadata,
+    createdAt: row.createdAt,
   };
 }
 

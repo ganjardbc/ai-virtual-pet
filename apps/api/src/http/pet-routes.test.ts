@@ -18,6 +18,7 @@ import { DrizzleEventRepository, DrizzlePetRepository } from '../persistence/dri
 import { InMemoryStore } from '../persistence/memory.js';
 import {
   ConcurrencyError,
+  type ConversationRepository,
   type EventRepository,
   type PetRepository,
 } from '../persistence/repositories.js';
@@ -40,9 +41,13 @@ interface Harness {
   error(options: InjectOptions, code: ApiErrorCode): Promise<void>;
 }
 
-function createHarness(pets: PetRepository, events: EventRepository): Harness {
+function createHarness(
+  pets: PetRepository,
+  events: EventRepository,
+  conversations: ConversationRepository = new InMemoryStore(),
+): Harness {
   const clock = new FakeClock(START);
-  const app = buildApp({ pets, events, clock, random: new SeededRandom(1) });
+  const app = buildApp({ pets, events, conversations, clock, random: new SeededRandom(1) });
 
   const request = async (options: InjectOptions) => {
     const response = await app.inject(options);

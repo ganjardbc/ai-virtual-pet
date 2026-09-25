@@ -1,3 +1,4 @@
+export * from './chat.js';
 export * from './debug.js';
 export * from './enums.js';
 export * from './errors.js';

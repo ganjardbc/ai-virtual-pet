@@ -19,7 +19,7 @@ import { buildApp } from '../app.js';
 import type { DatabaseConnection } from '../db/client.js';
 import { DrizzleEventRepository, DrizzlePetRepository } from '../persistence/drizzle.js';
 import { InMemoryStore } from '../persistence/memory.js';
-import type { EventRepository, PetRepository } from '../persistence/repositories.js';
+import type { ConversationRepository, EventRepository, PetRepository } from '../persistence/repositories.js';
 import { openTestDatabase, testDatabaseUrl, truncateAll } from '../testing/database.js';
 import { OffsetClock } from './offset-clock.js';
 
@@ -43,9 +43,13 @@ interface DebugHarness {
   startBaby(): Promise<void>;
 }
 
-function createDebugHarness(pets: PetRepository, events: EventRepository): DebugHarness {
+function createDebugHarness(
+  pets: PetRepository,
+  events: EventRepository,
+  conversations: ConversationRepository = new InMemoryStore(),
+): DebugHarness {
   const clock = new OffsetClock(new FakeClock(START));
-  const app = buildApp({ pets, events, clock, random: new SeededRandom(5), debug: { clock } });
+  const app = buildApp({ pets, events, conversations, clock, random: new SeededRandom(5), debug: { clock } });
 
   const request = async (options: InjectOptions) => {
     const response = await app.inject(options);
@@ -272,6 +276,7 @@ describe('debug gating', () => {
     const app = buildApp({
       pets: store,
       events: store,
+      conversations: store,
       clock: new FakeClock(START),
       random: new SeededRandom(1),
     });
@@ -297,6 +302,7 @@ describe('debug gating', () => {
       buildApp({
         pets: store,
         events: store,
+        conversations: store,
         clock: new FakeClock(START),
         random: new SeededRandom(1),
         debug: { clock: debugClock },

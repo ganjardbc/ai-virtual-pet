@@ -4,7 +4,11 @@ import { buildApp } from './app.js';
 import { optionalEnv, requireEnv } from './config/env.js';
 import { createDatabase } from './db/client.js';
 import { OffsetClock } from './debug/offset-clock.js';
-import { DrizzleEventRepository, DrizzlePetRepository } from './persistence/drizzle.js';
+import {
+  DrizzleConversationRepository,
+  DrizzleEventRepository,
+  DrizzlePetRepository,
+} from './persistence/drizzle.js';
 
 const debugEnabled = optionalEnv('ENABLE_DEBUG_API') === 'true';
 
@@ -15,6 +19,7 @@ if (debugEnabled && process.env.NODE_ENV === 'production') {
 const database = createDatabase(requireEnv('DATABASE_URL'));
 const pets = new DrizzlePetRepository(database.db);
 const events = new DrizzleEventRepository(database.db);
+const conversations = new DrizzleConversationRepository(database.db);
 const debugClock = debugEnabled ? new OffsetClock(new SystemClock()) : null;
 
 if (debugClock) {
@@ -34,6 +39,7 @@ if (debugClock) {
 const app = buildApp({
   pets,
   events,
+  conversations,
   clock: debugClock ?? new SystemClock(),
   random: new SystemRandom(),
   logger: true,

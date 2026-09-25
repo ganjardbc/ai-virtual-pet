@@ -1231,6 +1231,16 @@ getHistory
 
 Recent context and visible history may have different limits.
 
+As implemented (Unit 03, `ConversationRepository` in `apps/api/src/persistence/repositories.ts`):
+
+```text
+findForPet            read-only lookup (history never creates a conversation)
+getOrCreateForPet     race-safe, one per pet
+appendMessage         DuplicateMessageError on reused clientMessageId or second reply
+findTurn              Task 3.8 lookup: USER message by clientMessageId + its reply
+listRecentMessages    latest N, oldest first — serves both getRecentMessages (N = 12) and getHistory (N = 50)
+```
+
 ---
 
 # 41. Task 3.5 — Conversation Window

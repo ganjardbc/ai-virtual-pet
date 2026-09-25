@@ -2,15 +2,24 @@ import type { DomainEvent, DomainEventType, Pet, PetId, PetState } from '@ai-vir
 
 import {
   ConcurrencyError,
+  ConversationNotFoundError,
+  DuplicateMessageError,
   PetAlreadyExistsError,
   PetNotFoundError,
+  assertMessageContent,
   assertStateBelongsToPet,
+  type Conversation,
+  type ConversationRepository,
+  type ConversationTurn,
   type EventQuery,
   type EventRepository,
   type PetAggregate,
   type PetRepository,
+  type MessageQuery,
+  type NewMessage,
   type SavePetInput,
   type StoredEvent,
+  type StoredMessage,
 } from './repositories.js';
 
 interface MemoryRecord {
@@ -19,10 +28,13 @@ interface MemoryRecord {
 }
 
 /** In-process repositories with the same contract as the Drizzle implementation, for fast tests. */
-export class InMemoryStore implements PetRepository, EventRepository {
+export class InMemoryStore implements PetRepository, EventRepository, ConversationRepository {
   private readonly pets = new Map<PetId, MemoryRecord>();
   private readonly eventLog: StoredEvent[] = [];
+  private readonly conversations = new Map<string, Conversation>();
+  private readonly messageLog: StoredMessage[] = [];
   private nextEventId = 1;
+  private nextMessageId = 1;
   private nextSequence = 1;
 
   async findCurrent(): Promise<PetAggregate | null> {
@@ -81,8 +93,11 @@ export class InMemoryStore implements PetRepository, EventRepository {
   }
 
   async deleteAll(): Promise<void> {
+    // Mirrors the database cascade from pets to conversations and messages.
     this.pets.clear();
     this.eventLog.length = 0;
+    this.conversations.clear();
+    this.messageLog.length = 0;
   }
 
   async listRecent(petId: PetId, query: EventQuery): Promise<StoredEvent[]> {
@@ -98,6 +113,89 @@ export class InMemoryStore implements PetRepository, EventRepository {
       .filter((event) => event.petId === petId && event.type === type && event.occurredAt >= since)
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id - b.id)
       .map((event) => new Date(event.occurredAt));
+  }
+
+  async findForPet(petId: PetId): Promise<Conversation | null> {
+    const conversation = [...this.conversations.values()].find((candidate) => candidate.petId === petId);
+    return conversation ? structuredClone(conversation) : null;
+  }
+
+  async getOrCreateForPet(candidate: Conversation): Promise<Conversation> {
+    if (!this.pets.has(candidate.petId)) {
+      throw new PetNotFoundError(candidate.petId);
+    }
+
+    // Check and insert happen without awaiting, so concurrent calls cannot both create one.
+    const existing = [...this.conversations.values()].find((conversation) => conversation.petId === candidate.petId);
+
+    if (existing) {
+      return structuredClone(existing);
+    }
+
+    this.conversations.set(candidate.id, structuredClone(candidate));
+    return structuredClone(candidate);
+  }
+
+  async appendMessage(conversationId: string, message: NewMessage): Promise<StoredMessage> {
+    assertMessageContent(message.content);
+    const conversation = this.conversations.get(conversationId);
+
+    if (!conversation) {
+      throw new ConversationNotFoundError(conversationId);
+    }
+
+    const inConversation = this.messageLog.filter((stored) => stored.conversationId === conversationId);
+
+    if (message.role === 'USER') {
+      if (inConversation.some((stored) => stored.clientMessageId === message.clientMessageId)) {
+        throw new DuplicateMessageError(conversationId);
+      }
+    } else {
+      const target = inConversation.find((stored) => stored.id === message.replyToMessageId);
+
+      if (target?.role !== 'USER') {
+        throw new RangeError(`Message ${message.replyToMessageId} is not a player message in this conversation.`);
+      }
+
+      if (this.messageLog.some((stored) => stored.replyToMessageId === message.replyToMessageId)) {
+        throw new DuplicateMessageError(conversationId);
+      }
+    }
+
+    const stored: StoredMessage = {
+      id: this.nextMessageId++,
+      conversationId,
+      role: message.role,
+      content: message.content,
+      clientMessageId: message.role === 'USER' ? message.clientMessageId : null,
+      replyToMessageId: message.role === 'ASSISTANT' ? message.replyToMessageId : null,
+      metadata: message.role === 'ASSISTANT' ? { ...message.metadata } : {},
+      createdAt: message.createdAt,
+    };
+    this.messageLog.push(structuredClone(stored));
+    this.conversations.set(conversationId, { ...conversation, updatedAt: message.createdAt });
+    return structuredClone(stored);
+  }
+
+  async findTurn(conversationId: string, clientMessageId: string): Promise<ConversationTurn | null> {
+    const user = this.messageLog.find(
+      (stored) => stored.conversationId === conversationId && stored.clientMessageId === clientMessageId,
+    );
+
+    if (!user) {
+      return null;
+    }
+
+    const reply = this.messageLog.find((stored) => stored.replyToMessageId === user.id) ?? null;
+    return structuredClone({ user, reply });
+  }
+
+  async listRecentMessages(conversationId: string, query: MessageQuery): Promise<StoredMessage[]> {
+    const ordered = this.messageLog
+      .filter((stored) => stored.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id);
+
+    return ordered.slice(Math.max(0, ordered.length - query.limit)).map((stored) => structuredClone(stored));
   }
 
   private append(petId: PetId, events: readonly DomainEvent[]): void {
