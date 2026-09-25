@@ -1,12 +1,17 @@
 import {
   actionResultSchema,
   apiErrorEnvelopeSchema,
+  chatHistorySchema,
+  chatTurnResultSchema,
   hatchResultSchema,
   petSnapshotSchema,
   successEnvelopeSchema,
   type ActionResult,
   type ActionType,
   type ApiErrorCode,
+  type ChatHistory,
+  type ChatRequest,
+  type ChatTurnResult,
   type HatchResult,
   type PetSnapshot,
 } from '@ai-virtual-pet/contracts';
@@ -93,4 +98,10 @@ export const petApi = {
   name: (name: string): Promise<PetSnapshot> => request('PATCH', '/pet/name', petSnapshotSchema, { name }),
   act: (type: ActionType): Promise<ActionResult> =>
     request('POST', '/pet/actions', actionResultSchema, { type }),
+};
+
+export const chatApi = {
+  history: (): Promise<ChatHistory> => request('GET', '/pet/chat/history', chatHistorySchema),
+  /** Resending the same `clientMessageId` resumes or replays that turn; it never runs twice. */
+  send: (turn: ChatRequest): Promise<ChatTurnResult> => request('POST', '/pet/chat', chatTurnResultSchema, turn),
 };

@@ -2,6 +2,8 @@ import {
   ACTION_REACTION_TEXT,
   actionReactionKind,
   type ActionResult,
+  type ChatAction,
+  type ChatTurnResult,
   type PetSnapshot,
 } from '@ai-virtual-pet/contracts';
 
@@ -31,6 +33,25 @@ const REACTION_VISUAL: Readonly<Record<Exclude<ReturnType<typeof actionReactionK
   TOO_FULL: { expression: 'content', pose: 'center', motion: 'shake' },
   INVALID_STATE: { expression: 'curious', pose: 'center', motion: 'breathe' },
 };
+
+/**
+ * The pet's reaction to a chat turn: the AI's words, with the same look a button action would
+ * give when the turn triggered one (plan Tasks 9.7, 9.8). Plain Talk keeps the current look.
+ */
+export function reactionForChat(result: ChatTurnResult): Reaction {
+  return result.action
+    ? speech(result.message.content, visualForChatAction(result.action))
+    : speech(result.message.content);
+}
+
+function visualForChatAction(action: ChatAction): PetVisual {
+  if (action.status === 'REJECTED') {
+    return REACTION_VISUAL[action.reason === 'SLEEPING' ? 'INVALID_STATE' : action.reason];
+  }
+
+  // A chat reply carries no stat changes, so success uses the full (non-diminished) look.
+  return REACTION_VISUAL[action.type === 'FEED' ? 'HEARTY_MEAL' : action.type === 'PLAY' ? 'FULL_FUN' : 'GOOD_NIGHT'];
+}
 
 export function reactionForAction(result: ActionResult): Reaction {
   const kind = actionReactionKind(result);

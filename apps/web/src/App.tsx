@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useState, type ReactNode } from 'react';
 
 import { usePet, useHatch, useNamePet } from './api/pet-queries';
 import { Button } from './components/Button';
@@ -6,6 +6,7 @@ import { ShellCornerContext } from './components/GameShell';
 import { copy } from './presentation/copy';
 import { EggScreen } from './screens/EggScreen';
 import { NamingScreen } from './screens/NamingScreen';
+import { ConversationScreen } from './screens/ConversationScreen';
 import { PetHome } from './screens/PetHome';
 import { ConnectionScreen, LoadingScreen } from './screens/StatusScreens';
 
@@ -58,6 +59,9 @@ function GameScreens(): ReactNode {
   const [hatching, setHatching] = useState(false);
   const [hatchError, setHatchError] = useState<string | null>(null);
   const [celebratingName, setCelebratingName] = useState<string | null>(null);
+  const [talking, setTalking] = useState(false);
+  const openTalk = useCallback(() => setTalking(true), []);
+  const closeTalk = useCallback(() => setTalking(false), []);
 
   if (pet.isPending) {
     return <LoadingScreen />;
@@ -83,6 +87,11 @@ function GameScreens(): ReactNode {
   };
 
   if (hatching || !snapshot || snapshot.pet.stage === 'EGG') {
+    if (talking) {
+      // A debug reset back to an Egg must not reopen Talk after the next hatch.
+      setTalking(false);
+    }
+
     return <EggScreen hatching={hatching} onHatch={() => void startHatch()} error={hatchError} />;
   }
 
@@ -99,5 +108,11 @@ function GameScreens(): ReactNode {
     );
   }
 
-  return <PetHome key={snapshot.pet.id} snapshot={snapshot} />;
+  // Talk is a view over the same authoritative pet; leaving it keeps the conversation (Task 9.11).
+  // If the pet falls asleep, the Talk view shows the good-night reply and then closes itself.
+  if (talking) {
+    return <ConversationScreen key={snapshot.pet.id} snapshot={snapshot} onBack={closeTalk} />;
+  }
+
+  return <PetHome key={snapshot.pet.id} snapshot={snapshot} onTalk={openTalk} />;
 }

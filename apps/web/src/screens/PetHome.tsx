@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '../api/client';
 import { usePetAction } from '../api/pet-queries';
-import { ActionButton, FeedIcon, PlayIcon, SleepIcon } from '../components/ActionButton';
+import { ActionButton, FeedIcon, PlayIcon, SleepIcon, TalkIcon } from '../components/ActionButton';
 import { GameShell } from '../components/GameShell';
 import { Habitat } from '../components/Habitat';
 import { PetCharacter } from '../components/PetCharacter';
@@ -87,7 +87,13 @@ function useReturnPresentation(snapshot: PetSnapshot) {
   return { presentation, dismiss: () => setPresentation(null) };
 }
 
-export function PetHome({ snapshot }: { snapshot: PetSnapshot }) {
+interface PetHomeProps {
+  readonly snapshot: PetSnapshot;
+  /** Opens the Talk view. */
+  readonly onTalk?: () => void;
+}
+
+export function PetHome({ snapshot, onTalk }: PetHomeProps) {
   const action = usePetAction();
   const [actionReaction, setActionReaction] = useState<Reaction | null>(null);
   const [locked, setLocked] = useState(false);
@@ -174,6 +180,13 @@ export function PetHome({ snapshot }: { snapshot: PetSnapshot }) {
           onClick={() => act('PLAY')}
           disabled={busy || sleeping}
           busy={pendingType === 'PLAY'}
+          hint={sleepingHint}
+        />
+        <ActionButton
+          icon={<TalkIcon />}
+          label={copy.actions.talk}
+          onClick={() => onTalk?.()}
+          disabled={busy || sleeping || !onTalk}
           hint={sleepingHint}
         />
         <ActionButton

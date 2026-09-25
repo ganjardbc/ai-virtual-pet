@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { makeSnapshot } from '../testing/snapshot';
 import { EggScreen } from './EggScreen';
+import { ConversationScreen } from './ConversationScreen';
 import { NamingScreen } from './NamingScreen';
 import { PetHome } from './PetHome';
 
@@ -37,21 +38,63 @@ describe('player screens', () => {
     expect(text).toContain('Cukup');
     expect(text).toContain('Bersemangat');
     expect(text).toContain('Senang');
-    for (const raw of ['72.4', '64.2', '81.3', '12.7', 'Bond', 'Talk', 'Bicara']) {
+    expect(text).toContain('Bicara');
+    for (const raw of ['72.4', '64.2', '81.3', '12.7', 'Bond', 'Playful', 'Curious', 'Clingy']) {
       expect(text).not.toContain(raw);
     }
   });
 
-  it('presents sleep: Feed and Play disabled, Sleeping active, Energy recovering, no Wake button', () => {
+  it('presents sleep: Feed, Play, and Talk disabled, Sleeping active, Energy recovering, no Wake button', () => {
     const snapshot = makeSnapshot({
       state: { currentActivity: 'SLEEPING', sleepStartedAt: '2026-09-25T11:00:00.000Z' },
     });
     const markup = render(<PetHome snapshot={snapshot} />);
 
-    expect((markup.match(/disabled=""/g) ?? []).length).toBe(3);
+    expect((markup.match(/disabled=""/g) ?? []).length).toBe(4);
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('Memulihkan diri');
     expect(markup).toContain('Momo sedang tidur.');
     expect(markup).not.toMatch(/>(Wake|Bangunkan)</);
+  });
+});
+
+describe('Talk', () => {
+  it('offers Talk as a core action between Play and Sleep', () => {
+    const markup = render(<PetHome snapshot={makeSnapshot()} onTalk={() => {}} />);
+    const labels = [...markup.matchAll(/class="action__label">([^<]+)</g)].map((match) => match[1]);
+
+    expect(labels).toEqual(['Beri makan', 'Main', 'Bicara', 'Tidur']);
+  });
+
+  it('keeps the pet first, then the conversation, then the input (scope §124)', () => {
+    const markup = render(<ConversationScreen snapshot={makeSnapshot()} onBack={() => {}} />);
+    const pet = markup.indexOf('role="img"');
+    const log = markup.indexOf('role="log"');
+    const input = markup.indexOf('<textarea');
+
+    expect(pet).toBeGreaterThan(-1);
+    expect(pet).toBeLessThan(log);
+    expect(log).toBeLessThan(input);
+    expect(markup).toContain('>Momo<');
+  });
+
+  it('labels the input, bounds it to 1000 characters, and offers a way back', () => {
+    const markup = render(<ConversationScreen snapshot={makeSnapshot()} onBack={() => {}} />);
+
+    expect(markup).toContain('<label class="visually-hidden" for="chat-input">Pesan untuk Momo</label>');
+    expect(markup).toContain('maxLength="1000"');
+    expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain('role="status"');
+    expect(visibleText(markup)).toContain('Kembali');
+    // Nothing to send yet.
+    expect(markup).toMatch(/<button type="submit"[^>]*disabled=""/);
+  });
+
+  it('shows no stats, personality, or debug data in the Talk view', () => {
+    const text = visibleText(render(<ConversationScreen snapshot={makeSnapshot()} onBack={() => {}} />));
+
+    for (const hidden of ['72.4', '12.7', 'Bond', 'confidence', 'PLAYFUL', 'Playful']) {
+      expect(text).not.toContain(hidden);
+    }
   });
 });

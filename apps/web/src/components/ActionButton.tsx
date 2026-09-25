@@ -61,6 +61,13 @@ export const PlayIcon = () => (
   </svg>
 );
 
+export const TalkIcon = () => (
+  <svg {...iconProps}>
+    <path d="M4 5h16v11H9l-4 4v-4H4Z" />
+    <path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" />
+  </svg>
+);
+
 export const SleepIcon = () => (
   <svg {...iconProps}>
     <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" />
