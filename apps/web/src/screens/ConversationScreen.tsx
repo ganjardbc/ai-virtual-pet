@@ -147,7 +147,7 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
   const canSend = composeMessage(draft).valid && !pending && !sleeping;
 
   return (
-    <GameShell title={name}>
+    <GameShell title={name} variant="conversation">
       <div className="talk__bar">
         <Button variant="ghost" className="talk__back" onClick={onBack}>
           <span aria-hidden="true">←</span> {copy.chat.back}
@@ -167,10 +167,21 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
       </Habitat>
 
       <section className="conversation" aria-label={copy.chat.region(name)}>
-        <ol className="conversation__log" role="log" aria-live="polite" aria-label={copy.chat.region(name)} ref={logRef}>
+        <ol
+          className="conversation__log"
+          role="log"
+          aria-live="polite"
+          aria-label={copy.chat.region(name)}
+          aria-busy={history.isPending || undefined}
+          ref={logRef}
+        >
           {messages.map((message) => (
             <ConversationMessage key={message.id} message={message} petName={name} />
           ))}
+          {history.isPending && <li className="conversation__empty">{copy.system.loading}</li>}
+          {history.isSuccess && messages.length === 0 && !pending && (
+            <li className="conversation__empty">{copy.chat.empty(name)}</li>
+          )}
           {pending && (
             <li className="message message--player message--pending">
               <span className="message__speaker">{copy.chat.you}</span>
@@ -179,10 +190,6 @@ export function ConversationScreen({ snapshot, onBack }: ConversationScreenProps
             </li>
           )}
         </ol>
-
-        {history.isSuccess && messages.length === 0 && !pending && (
-          <p className="conversation__empty">{copy.chat.empty(name)}</p>
-        )}
 
         <p className="visually-hidden" role="status">
           {waiting ? copy.chat.listening(name) : ''}

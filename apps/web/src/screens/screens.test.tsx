@@ -76,6 +76,8 @@ describe('Talk', () => {
     expect(pet).toBeLessThan(log);
     expect(log).toBeLessThan(input);
     expect(markup).toContain('>Momo<');
+    expect(markup).toContain('class="game game--conversation"');
+    expect(markup).toContain('aria-busy="true"');
   });
 
   it('labels the input, bounds it to 1000 characters, and offers a way back', () => {

@@ -6,10 +6,11 @@ export const ShellCornerContext = createContext<ReactNode>(null);
 interface GameShellProps {
   readonly title?: string | undefined;
   readonly children: ReactNode;
+  readonly variant?: 'default' | 'conversation';
 }
 
 /** Bounded, centered game container: personal and focused, never a full-width dashboard. */
-export function GameShell({ title, children }: GameShellProps) {
+export function GameShell({ title, children, variant = 'default' }: GameShellProps) {
   const corner = useContext(ShellCornerContext);
 
   return (
@@ -21,7 +22,7 @@ export function GameShell({ title, children }: GameShellProps) {
         <span className="shell__leaf shell__leaf--one" />
         <span className="shell__leaf shell__leaf--two" />
       </div>
-      <main className="game">
+      <main className={variant === 'conversation' ? 'game game--conversation' : 'game'}>
         {(title || corner) && (
           <header className="game__header">
             {title ? (

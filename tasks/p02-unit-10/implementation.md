@@ -29,6 +29,14 @@ Complete.
 
 Labeled textarea ("Pesan untuk Momo"), Enter to send, visible focus ring, `role="log"` + `aria-live="polite"` conversation with a visible speaker on every message, `role="status"` listening line, errors via `SystemMessage` (`role="alert"`), pet label includes the listening state.
 
+## Game UI Integration Update (2026-09-25)
+
+- Added a dedicated `GameShell` conversation variant without changing the semantic order of pet → log → composer.
+- Desktop Talk now uses a two-panel game layout: the living habitat on the left and a fixed-height conversation panel on the right.
+- Mobile Talk keeps the full-screen game shell but uses a shorter habitat so conversation history and the composer appear earlier in the scroll.
+- Moved empty and loading states into the live conversation log. Loading history now exposes `aria-busy` instead of briefly presenting an unexplained empty panel.
+- Restyled the Back control, conversation surface, and responsive composer to match the Pocket Garden game skin added after the original Unit 10 implementation.
+
 ## Decisions
 
 1. **One pending turn at a time.** A failed turn must be retried (or the page left) before a new one — so Retry can never be confused with a new message.
@@ -44,5 +52,6 @@ apps/web/src/components/ActionButton.tsx
 apps/web/src/presentation/chat.ts (new), chat.test.ts (new), copy.ts, reactions.ts
 apps/web/src/screens/ConversationScreen.tsx (new), PetHome.tsx, screens.test.tsx
 apps/web/src/styles/app.css
+apps/web/src/components/GameShell.tsx
 tasks/p02-unit-10/*
 ```

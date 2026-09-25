@@ -2160,22 +2160,54 @@ body::after {
 }
 
 .talk__back {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 2px solid rgb(24 49 61 / 18%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 42%);
+  color: var(--color-text-primary);
   font-family: var(--font-display);
   font-weight: 700;
 }
 
+.talk__back:hover {
+  border-color: #18313d;
+  background: #fffaf0;
+}
+
 .conversation {
+  position: relative;
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
   border: 3px solid #18313d;
   border-radius: 22px;
-  background: rgb(255 250 240 / 72%);
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 52%), transparent 38%),
+    rgb(255 250 240 / 82%);
   box-shadow: 0 5px 0 #18313d;
+  overflow: hidden;
+}
+
+.conversation::before {
+  position: absolute;
+  top: -28px;
+  right: -22px;
+  width: 90px;
+  height: 90px;
+  border: 16px solid rgb(69 184 165 / 11%);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
 }
 
 .conversation__log {
   display: flex;
+  min-height: 0;
   max-height: min(34vh, 280px);
   flex-direction: column;
   gap: 8px;
@@ -2187,9 +2219,14 @@ body::after {
 }
 
 .conversation__empty {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
   margin: 0;
+  padding: 24px 12px;
   color: var(--color-text-muted);
   font-style: italic;
+  list-style: none;
   text-align: center;
 }
 
@@ -2238,6 +2275,8 @@ body::after {
 }
 
 .composer {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -2276,4 +2315,87 @@ body::after {
   grid-column: 2;
   grid-row: 1;
   min-height: 46px;
+}
+
+@media (min-width: 721px) {
+  .game--conversation {
+    width: min(100%, 1040px);
+    grid-template-columns: minmax(0, 1.12fr) minmax(330px, 0.88fr);
+    align-items: stretch;
+  }
+
+  .game--conversation .game__header,
+  .game--conversation .talk__bar {
+    grid-column: 1 / -1;
+  }
+
+  .game--conversation .habitat {
+    height: 470px;
+    grid-column: 1;
+  }
+
+  .game--conversation .conversation {
+    height: 470px;
+    grid-column: 2;
+  }
+
+  .game--conversation .conversation__log {
+    max-height: none;
+    padding: 4px 7px 6px 3px;
+  }
+}
+
+@media (max-width: 720px) {
+  .game--conversation {
+    min-height: 100dvh;
+  }
+
+  .game--conversation .talk__bar,
+  .game--conversation .habitat,
+  .game--conversation .conversation {
+    grid-column: 1;
+  }
+
+  .game--conversation .habitat {
+    width: 100%;
+    height: auto;
+    max-height: 310px;
+    aspect-ratio: 1.35 / 1;
+  }
+
+  .game--conversation .habitat__pet {
+    width: clamp(138px, 40vw, 180px);
+  }
+
+  .game--conversation .habitat__reaction {
+    bottom: 57%;
+  }
+
+  .game--conversation .conversation {
+    min-height: 300px;
+    padding: 10px;
+    border-width: 2px;
+    border-radius: 19px;
+    box-shadow: 0 3px 0 #18313d;
+  }
+
+  .game--conversation .conversation__log {
+    max-height: min(38dvh, 300px);
+  }
+
+  .game--conversation .composer__input {
+    min-height: 48px;
+    resize: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .game--conversation .habitat {
+    max-height: 270px;
+    aspect-ratio: 1.42 / 1;
+  }
+
+  .game--conversation .conversation {
+    min-height: 280px;
+  }
 }

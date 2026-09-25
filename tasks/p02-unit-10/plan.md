@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete (automated). Manual browser journey left to the owner / Unit 12.
+Complete. Automated checks and the owner-confirmed manual browser journey have passed.
 
 ## Goal
 
@@ -24,4 +24,4 @@ pnpm typecheck / test / build
 
 ## Phase 9 Gate
 
-Manual journey Pet Home → Talk → "Main yuk" → Play → reply → continue → Back → Pet Home — to be walked through in a browser (Unit 12 hardening).
+Manual journey Pet Home → Talk → "Main yuk" → Play → reply → continue → Back → Pet Home — passed in the owner's browser test. Desktop and mobile UI were confirmed to work well.
