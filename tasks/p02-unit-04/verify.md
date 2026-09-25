@@ -55,3 +55,7 @@ Automated verification passed. Live Phase 4 gate call **pending** credentials. D
 3. Record model, latency, and tokens here.
 
 Next: Unit 05 — Structured Interpretation (can proceed with the fake provider; its live evaluation needs the same credentials).
+
+## Live Gate Result (2026-09-25, during Unit 09)
+
+Passed after an adapter fix (9router streams by default; adapter now sends `stream: false`). Model `ag/gemini-3.8-flash-medium`: `OK reply: Halo juga! Apa kabar?`, 3,826 ms, 2,229 input / 16 output tokens.

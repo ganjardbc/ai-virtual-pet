@@ -14,6 +14,8 @@
     "playtest:reset": "pnpm --filter @ai-virtual-pet/api playtest:reset",
     "playtest:advance": "pnpm --filter @ai-virtual-pet/api playtest:advance",
     "ai:smoke": "pnpm --filter @ai-virtual-pet/api ai:smoke",
-    "ai:eval:interpretation": "pnpm --filter @ai-virtual-pet/api ai:eval:interpretation"
+    "ai:eval:interpretation": "pnpm --filter @ai-virtual-pet/api ai:eval:interpretation",
+    "ai:eval:character": "pnpm --filter @ai-virtual-pet/api ai:eval:character",
+    "test:ai": "pnpm ai:smoke && pnpm ai:eval:interpretation && pnpm ai:eval:character"
   }
 }

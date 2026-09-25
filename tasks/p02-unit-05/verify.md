@@ -33,3 +33,7 @@ Automated verification passed. Live evaluation **pending** credentials. Date: 20
 3. Record here: model, pass / false positive / false negative counts, average latency, and each false positive. Any false positive is fixed (prompt or threshold) before false negatives.
 
 Next: Unit 06 — Context Builder.
+
+## Live Evaluation Result (2026-09-25, during Unit 09)
+
+Model `ag/gemini-3.8-flash-medium`. With the 5 s default: 24 pass / 0 FP / 1 FN, but 8 timeouts (fallback). With a 10 s override: 24 pass / **0 false positives** / 1 FN (one call > 10 s). All ambiguous, multi-action, and injection cases correct. Interpretation latency 3.2–6.5 s — see Unit 09 findings on the timeout.

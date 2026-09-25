@@ -18,6 +18,7 @@ import {
   derivePersonalityPromptProfile,
   personalityLevel,
 } from './personality-profile.js';
+import { PERSONALITY_PRESETS, PERSONALITY_PRESET_NAMES } from './personality-presets.js';
 import { requireDayBucket, utcDayBucket } from './primitives.js';
 import { SeededRandom, SequenceRandom } from './random.js';
 
@@ -392,5 +393,15 @@ describe('personality profile', () => {
       socialStyle: 'CLINGY',
     });
     expect(JSON.stringify(profile)).not.toMatch(/\d/);
+  });
+});
+
+describe('personality presets', () => {
+  it.each(PERSONALITY_PRESET_NAMES)('%s is a valid personality with the intended dominant trait', (name) => {
+    const traits = PERSONALITY_PRESETS[name];
+    const profile = derivePersonalityProfile(traits);
+
+    expect(() => createState(traits)).not.toThrow();
+    expect(profile.dominantTraits).toEqual(name === 'BALANCED' ? [] : [name.replace('HIGH_', '')]);
   });
 });

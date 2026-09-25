@@ -79,7 +79,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         return { ok: false, reason: 'PROVIDER_ERROR', detail: `Provider responded ${response.status}.`, usage: usage() };
       }
 
-      const body = (await response.json()) as ChatCompletionResponse;
+      const body = await readCompletion(response);
       const content = body.choices?.[0]?.message?.content;
 
       if (typeof content !== 'string') {
@@ -109,12 +109,47 @@ export class OpenAICompatibleProvider implements AIProvider {
   private requestBody<T>(request: AIStructuredRequest<T>) {
     return {
       model: this.model,
+      // Some routers (9router) stream by default; this adapter reads one JSON response.
+      stream: false,
       messages: request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
       ...(this.config.jsonMode ? { response_format: { type: 'json_object' } } : {}),
     };
   }
+}
+
+interface ChatCompletionChunk {
+  readonly choices?: readonly { readonly delta?: { readonly content?: unknown } }[];
+  readonly usage?: ChatCompletionResponse['usage'];
+}
+
+/**
+ * A JSON completion, or — if the endpoint streams anyway — the server-sent chunks assembled into
+ * one. A malformed body throws SyntaxError, reported as MALFORMED_OUTPUT.
+ */
+async function readCompletion(response: Response): Promise<ChatCompletionResponse> {
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    return (await response.json()) as ChatCompletionResponse;
+  }
+
+  let content = '';
+  let usage: ChatCompletionResponse['usage'];
+
+  for (const line of (await response.text()).split('\n')) {
+    const data = line.startsWith('data:') ? line.slice(5).trim() : '';
+
+    if (!data || data === '[DONE]') {
+      continue;
+    }
+
+    const chunk = JSON.parse(data) as ChatCompletionChunk;
+    const delta = chunk.choices?.[0]?.delta?.content;
+    content += typeof delta === 'string' ? delta : '';
+    usage = chunk.usage ?? usage;
+  }
+
+  return { choices: [{ message: { content } }], ...(usage ? { usage } : {}) };
 }
 
 function tokenCount(value: unknown): number | null {

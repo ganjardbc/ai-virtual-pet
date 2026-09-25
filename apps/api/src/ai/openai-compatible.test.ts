@@ -109,6 +109,7 @@ describe('OpenAICompatibleProvider', () => {
         authorization: `Bearer ${API_KEY}`,
         body: {
           model: 'router/test-model',
+          stream: false,
           messages: [
             { role: 'system', content: 'Return JSON.' },
             { role: 'user', content: 'Main yuk!' },
@@ -135,6 +136,32 @@ describe('OpenAICompatibleProvider', () => {
 
     handler = completion('Here you go: {"intent":"PLAY","confidence":0.9}');
     expect(await provider().generateStructured(request())).toMatchObject({ ok: true, value: { intent: 'PLAY' } });
+  });
+
+  it('assembles a streamed (server-sent events) response when the endpoint streams anyway', async () => {
+    handler = (_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      for (const piece of ['{"intent":', '"PLAY","confidence"', ':0.9}']) {
+        response.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: piece } }] })}\n\n`);
+      }
+      response.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {} }], usage: { prompt_tokens: 12, completion_tokens: 4 } })}\n\n`);
+      response.end('data: [DONE]\n\n');
+    };
+
+    expect(await provider().generateStructured(request())).toMatchObject({
+      ok: true,
+      value: { intent: 'PLAY', confidence: 0.9 },
+      usage: { inputTokens: 12, outputTokens: 4 },
+    });
+  });
+
+  it('reports MALFORMED_OUTPUT for a broken stream', async () => {
+    handler = (_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.end('data: {not json\n\n');
+    };
+
+    expect(await provider().generateStructured(request())).toMatchObject({ ok: false, reason: 'MALFORMED_OUTPUT' });
   });
 
   it('treats missing usage as unknown, not as an error', async () => {
