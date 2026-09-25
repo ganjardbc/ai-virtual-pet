@@ -602,7 +602,7 @@ Integration tests menjalankan migration yang sama secara otomatis ke `TEST_DATAB
 
 ### Debug API
 
-Debug harness (time travel, set stats, force sleep/wake, reset) aktif hanya jika `ENABLE_DEBUG_API=true` dan server menolak start jika flag tersebut aktif bersama `NODE_ENV=production`.
+Debug harness (time travel, set stats, force sleep/wake, reset) aktif hanya jika `ENABLE_DEBUG_API=true`. Flag ini tidak lagi dikunci ke `NODE_ENV`; rute debug dapat menulis ulang state game tanpa autentikasi, jadi nyalakan hanya di mesin lokal atau server playtest privat.
 
 ```text
 GET    /api/v1/debug/pet/state

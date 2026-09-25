@@ -11,11 +11,10 @@ import {
   DrizzlePetRepository,
 } from './persistence/drizzle.js';
 
+// Development debug harness (time travel, state overrides, reset): explicit opt-in via
+// ENABLE_DEBUG_API. It exposes routes that rewrite game state, so only enable it where those
+// matter more than the risk — a local machine or a private playtest server.
 const debugEnabled = optionalEnv('ENABLE_DEBUG_API') === 'true';
-
-if (debugEnabled && process.env.NODE_ENV === 'production') {
-  throw new Error('ENABLE_DEBUG_API must not be enabled when NODE_ENV=production.');
-}
 
 // An invalid AI setting stops startup; missing credentials only disable Talk (plan Task 4.2).
 const aiConfig = loadAIConfig(process.env);
