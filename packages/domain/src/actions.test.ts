@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyFeed, applyPlay, startSleep, wakePet } from './actions.js';
+import { applyFeed, applyPlay, applyTalk, startSleep, wakePet } from './actions.js';
 import { createPetState, type PetState } from './state.js';
 
 const now = new Date('2026-09-25T12:00:00.000Z');
@@ -229,5 +229,41 @@ describe('stat range invariant', () => {
         expect(value).toBeLessThanOrEqual(100);
       }
     }
+  });
+});
+
+describe('applyTalk', () => {
+  const input = { bondGainedToday: 0, classification: 'AFFECTION' };
+
+  it('grants +0.25 Bond, marks interaction, and records PET_TALKED', () => {
+    const result = applyTalk(createState({ bond: 10 }), now, input);
+
+    expect(result.state.bond).toBe(10.25);
+    expect(result.bondDelta).toBe(0.25);
+    expect(result.state.lastInteractionAt).toBe(now);
+    expect(result.events).toEqual([
+      { type: 'PET_TALKED', occurredAt: now, payload: { bondDelta: 0.25, classification: 'AFFECTION' } },
+    ]);
+  });
+
+  it('grants only the remainder near the daily cap, and nothing once it is reached', () => {
+    expect(applyTalk(createState(), now, { ...input, bondGainedToday: 1.9 }).bondDelta).toBe(0.1);
+
+    const capped = applyTalk(createState({ bond: 10 }), now, { ...input, bondGainedToday: 2 });
+    expect(capped.bondDelta).toBe(0);
+    expect(capped.state.bond).toBe(10);
+    expect(capped.events[0]?.payload).toEqual({ bondDelta: 0, classification: 'AFFECTION' });
+  });
+
+  it('clamps Bond at 100', () => {
+    expect(applyTalk(createState({ bond: 99.9 }), now, input).state.bond).toBe(100);
+  });
+
+  it('changes nothing for a sleeping pet', () => {
+    const sleeping = createState({ currentActivity: 'SLEEPING', sleepStartedAt: now });
+    const result = applyTalk(sleeping, now, input);
+
+    expect(result.state).toBe(sleeping);
+    expect(result.events).toEqual([]);
   });
 });

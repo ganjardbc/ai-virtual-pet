@@ -8,6 +8,7 @@ import {
   applyFeed,
   applyPersonalitySignal,
   applyPlay,
+  applyTalk,
   createDomainEvent,
   createInitialPersonality,
   createEgg,
@@ -17,6 +18,9 @@ import {
   namePet,
   startSleep,
   SystemRandom,
+  PERSONALITY_TRAITS,
+  PERSONALITY_TRAIT_KEYS,
+  utcDayBucket,
   type ActionResult as DomainActionResult,
   type Clock,
   type DomainEvent,
@@ -80,8 +84,32 @@ export interface Mutation<T> {
   readonly result: (snapshot: PetSnapshot) => T | Promise<T>;
 }
 
+/** Options for a care action triggered by a chat turn (plan Tasks 7.5, 7.7). */
+export interface ActOptions {
+  /** The player message that caused the action; tagged on its events for turn idempotency. */
+  readonly turnMessageId?: number;
+  /** Personality signal from the message's classification, used when the action is rejected. */
+  readonly rejectedSignal?: PersonalitySignal;
+}
+
+/** A completed TALK turn whose reply came from the AI (plan Tasks 7.7, 7.8). */
+export interface TalkTurn {
+  readonly turnMessageId: number;
+  readonly classification: string;
+  readonly signal: PersonalitySignal;
+  /** Earns Talk Bond (TALK intent, non-CASUAL, AI reply). The chat service decides. */
+  readonly meaningful: boolean;
+}
+
+export interface TalkRecord {
+  readonly pet: PetSnapshot;
+  readonly bondDelta: number;
+  /** The turn was already recorded (a resumed turn): nothing was applied again. */
+  readonly alreadyRecorded: boolean;
+}
+
 /** Personality signal caused by an accepted care action (plan Tasks 2.5–2.6). Sleep has none. */
-const ACTION_PERSONALITY_SIGNAL: Readonly<Partial<Record<ActionType, PersonalitySignal>>> = {
+export const ACTION_PERSONALITY_SIGNAL: Readonly<Partial<Record<ActionType, PersonalitySignal>>> = {
   PLAY: 'PLAY',
   FEED: 'CARE',
 };
@@ -170,20 +198,21 @@ export class PetService {
     });
   }
 
-  async act(type: ActionType): Promise<ActionResult> {
+  async act(type: ActionType, options: ActOptions = {}): Promise<ActionResult> {
     return this.mutate(async ({ aggregate, state, personality, now }) => {
       if (aggregate.pet.stage === 'EGG' || !personality) {
         throw invalidStage('An Egg cannot receive care actions.');
       }
 
       const outcome = await this.applyAction(type, aggregate, state, now);
-      const signal = outcome.accepted ? ACTION_PERSONALITY_SIGNAL[type] : undefined;
+      // An accepted action is the turn's one signal; a rejected Play teaches nothing about play,
+      // so a chat turn falls back to what the message itself expressed.
+      const signal = outcome.accepted ? ACTION_PERSONALITY_SIGNAL[type] : options.rejectedSignal;
 
       return {
         pet: aggregate.pet,
         state: outcome.state,
-        events: outcome.events,
-        // Only an accepted action shapes personality; a rejected Play teaches nothing.
+        events: tagTurn(outcome.events, options.turnMessageId),
         personality: signal ? applyPersonalitySignal(personality, signal, now, this.personalityRules).state : personality,
         result: (snapshot): ActionResult =>
           outcome.accepted
@@ -199,6 +228,47 @@ export class PetService {
                 pet: snapshot,
               }
             : { status: 'REJECTED', action: { type }, reason: outcome.reason, pet: snapshot },
+      };
+    });
+  }
+
+  /**
+   * Applies a completed TALK turn: the classification's personality signal and, when meaningful,
+   * capped Talk Bond. Idempotent per turn, so a resumed turn never applies twice.
+   */
+  async recordTalk(turn: TalkTurn): Promise<TalkRecord> {
+    return this.mutate<TalkRecord>(async ({ aggregate, state, personality, now }) => {
+      if (aggregate.pet.stage === 'EGG' || !personality) {
+        throw invalidStage('An Egg cannot talk.');
+      }
+
+      const petId = aggregate.pet.id;
+      const recorded = await this.deps.events.listForTurn(petId, turn.turnMessageId);
+
+      if (recorded.some((event) => event.type === 'PET_TALKED')) {
+        return { pet: aggregate.pet, state, events: [], result: (pet) => ({ pet, bondDelta: 0, alreadyRecorded: true }) };
+      }
+
+      const talk = turn.meaningful
+        ? applyTalk(
+            state,
+            now,
+            {
+              // Today's Talk Bond comes from the event log, read inside this version-checked
+              // operation, so concurrent turns cannot both claim the remaining cap.
+              bondGainedToday: sumBondDelta(await this.deps.events.listSince(petId, 'PET_TALKED', startOfUtcDay(now))),
+              classification: turn.classification,
+            },
+            this.rules,
+          )
+        : { state, bondDelta: 0, events: [] };
+
+      return {
+        pet: aggregate.pet,
+        state: talk.state,
+        events: tagTurn(talk.events, turn.turnMessageId),
+        personality: applyPersonalitySignal(personality, turn.signal, now, this.personalityRules).state,
+        result: (pet) => ({ pet, bondDelta: talk.bondDelta, alreadyRecorded: false }),
       };
     });
   }
@@ -238,8 +308,12 @@ export class PetService {
       const simulated = this.simulate(aggregate, now);
       const personality = this.loadPersonality(aggregate, simulated.events, now);
       const mutation = await operation({ aggregate, state: simulated.state, personality, now });
-      const events = [...simulated.events, ...mutation.events];
       const nextPersonality = mutation.personality ?? personality;
+      const events = [
+        ...simulated.events,
+        ...mutation.events,
+        ...personalityChangedEvent(aggregate.personality, nextPersonality, now),
+      ];
       const changed =
         events.length > 0 ||
         mutation.pet !== aggregate.pet ||
@@ -323,7 +397,8 @@ export class PetService {
     const petId = aggregate.pet.id;
     const excitedSince = new Date(now.getTime() - this.rules.mood.excitedWithinMs);
     const [recentEvents, recentPlays] = await Promise.all([
-      this.deps.events.listRecent(petId, { limit: RECENT_EVENT_LIMIT }),
+      // Personality values (DEC-043) and conversation classification (scope §55) are internal.
+      this.deps.events.listRecent(petId, { limit: RECENT_EVENT_LIMIT, excludeTypes: PLAYER_HIDDEN_EVENTS }),
       this.deps.events.listOccurrenceTimes(petId, 'PET_PLAYED', excitedSince),
     ]);
 
@@ -334,6 +409,42 @@ export class PetService {
       rules: this.rules,
     });
   }
+}
+
+const PLAYER_HIDDEN_EVENTS = ['PERSONALITY_CHANGED', 'PET_TALKED'] as const;
+
+/** One PERSONALITY_CHANGED event when stored traits changed (not for first initialization). */
+function personalityChangedEvent(
+  stored: PersonalityState | undefined,
+  next: PersonalityState | null,
+  now: Date,
+): DomainEvent[] {
+  if (!stored || !next) {
+    return [];
+  }
+
+  const changes = PERSONALITY_TRAITS.flatMap((trait) => {
+    const key = PERSONALITY_TRAIT_KEYS[trait];
+    const previous = stored.traits[key];
+    const value = next.traits[key];
+    return previous === value ? [] : [{ trait, previous, next: value, appliedDelta: roundDelta(value - previous) }];
+  });
+
+  return changes.length > 0 ? [createDomainEvent('PERSONALITY_CHANGED', now, { changes })] : [];
+}
+
+function tagTurn(events: readonly DomainEvent[], turnMessageId: number | undefined): DomainEvent[] {
+  return turnMessageId === undefined
+    ? [...events]
+    : events.map((event) => ({ ...event, payload: { ...event.payload, turnMessageId } }));
+}
+
+function sumBondDelta(events: readonly { readonly payload: Readonly<Record<string, unknown>> }[]): number {
+  return events.reduce((sum, event) => sum + (typeof event.payload.bondDelta === 'number' ? event.payload.bondDelta : 0), 0);
+}
+
+function startOfUtcDay(at: Date): Date {
+  return new Date(`${utcDayBucket(at)}T00:00:00.000Z`);
 }
 
 /** Removes floating-point noise (e.g. 0.09999999999999964) from reported deltas. */

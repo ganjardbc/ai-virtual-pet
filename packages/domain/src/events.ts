@@ -7,7 +7,9 @@ export type DomainEventType =
   | 'PET_WOKE_UP'
   | 'PET_ACTIVITY_CHANGED'
   | 'ACTION_REJECTED'
-  | 'DEBUG_STATE_CHANGED';
+  | 'DEBUG_STATE_CHANGED'
+  | 'PET_TALKED'
+  | 'PERSONALITY_CHANGED';
 
 export interface DomainEvent {
   readonly type: DomainEventType;

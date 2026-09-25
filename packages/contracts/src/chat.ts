@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import { actionRejectionReasonSchema, actionTypeSchema } from './enums.js';
+import { petSnapshotSchema } from './responses.js';
+
 /** Prototype limit for one player message (plan Task 4.6). */
 export const CHAT_MESSAGE_MAX_LENGTH = 1000;
 
@@ -30,3 +33,23 @@ export const chatHistorySchema = z.object({
   messages: z.array(chatMessageDtoSchema),
 });
 export type ChatHistory = z.infer<typeof chatHistorySchema>;
+
+/** Intent the turn acted on, after the confidence threshold. */
+export const chatIntentSchema = z.enum(['FEED', 'PLAY', 'SLEEP', 'TALK', 'NONE']);
+export type ChatIntent = z.infer<typeof chatIntentSchema>;
+
+/** Outcome of a care action a chat turn triggered — decided by the Game Engine, not the AI. */
+export const chatActionSchema = z.discriminatedUnion('status', [
+  z.object({ type: actionTypeSchema, status: z.literal('SUCCESS') }),
+  z.object({ type: actionTypeSchema, status: z.literal('REJECTED'), reason: actionRejectionReasonSchema }),
+]);
+export type ChatAction = z.infer<typeof chatActionSchema>;
+
+/** Result of `POST /api/v1/pet/chat`. No provider output or debug metadata. */
+export const chatTurnResultSchema = z.object({
+  message: chatMessageDtoSchema,
+  intent: chatIntentSchema,
+  action: chatActionSchema.nullable(),
+  pet: petSnapshotSchema,
+});
+export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;

@@ -58,6 +58,11 @@ export interface GameRules {
     readonly diminishingWindowMs: number;
     readonly diminishingMultipliers: readonly number[];
   };
+  /** Talk Bond (Prototype 0.2 plan Task 7.8): small, capped per UTC day so chat cannot be farmed. */
+  readonly talk: {
+    readonly bond: number;
+    readonly maxBondPerDay: number;
+  };
   readonly sleep: {
     readonly bond: number;
     readonly autoWakeAtEnergy: number;
@@ -136,6 +141,10 @@ export const DEFAULT_GAME_RULES: GameRules = Object.freeze({
     minimumEnergyExclusive: 15,
     diminishingWindowMs: 2 * HOUR_MS,
     diminishingMultipliers: Object.freeze([1, 0.75, 0.5, 0.25]),
+  }),
+  talk: Object.freeze({
+    bond: 0.25,
+    maxBondPerDay: 2,
   }),
   sleep: Object.freeze({
     bond: 0.1,

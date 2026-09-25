@@ -2302,6 +2302,8 @@ Resolution table:
 
 The signal is applied once per turn and is covered by turn idempotency (Task 3.8).
 
+Frozen in Unit 07 (resolves a conflict with Task 2.5): on a **rejected** care action, the classification signal is applied **unless it equals the signal the action itself would have given** (PLAY for Play, CARE for Feed). So a rejected "Main yuk!" (PLAYFUL) teaches nothing, while a rejected "Kamu hebat, main yuk!" (PRAISE) still applies PRAISE.
+
 ---
 
 # 83. Task 7.8 — Talk Bond Gain
@@ -2358,14 +2360,9 @@ talk: {
 }
 ```
 
-Persist the daily counter on pet state (migration adds to `pet_states`):
+As implemented (Unit 07): **no new `pet_states` columns.** Today's Talk Bond is the sum of today's `PET_TALKED` `bondDelta` payloads, read inside the version-checked `PetService.mutate` — the same pattern Play diminishing uses with `PET_PLAYED`. A concurrent turn that loses the version check re-reads the events, so the cap cannot be exceeded.
 
-```text
-talkBondDate
-talkBondToday
-```
-
-Chat service calls `applyTalk` through `PetService` persistence (same version/retry path). No Bond arithmetic inside the chat service.
+Chat service calls `PetService.recordTalk` (which calls `applyTalk`) through the same version/retry path. `recordTalk` is idempotent per turn: `PET_TALKED` carries `turnMessageId`, so a resumed turn never applies Bond or personality twice. No Bond arithmetic inside the chat service.
 
 Do not gain Bond for:
 
@@ -2520,12 +2517,15 @@ Server-side fallback table (mirror of `reactionForAction`):
 | FEED accepted (diminished) | `"Udah mulai kenyang…"` |
 | FEED rejected TOO_FULL | `"Aku udah kenyang…"` |
 | PLAY accepted | `"Lagi! Lagi!"` |
+| PLAY accepted (diminished) | `"Seru juga."` |
 | PLAY rejected TOO_TIRED | `"Aku capek banget…"` |
 | SLEEP accepted | `"Selamat tidur…"` |
 | Other rejection | `"Hmm?"` |
 | TALK / NONE | none — see Task 7.16 |
 
 Keep the table in one shared place (e.g. `packages/contracts` or a shared presentation module) instead of duplicating strings between web and API, if practical.
+
+As implemented (Unit 07): `packages/contracts/src/reactions.ts` (`actionReactionKind`, `ACTION_REACTION_TEXT`), used by both the API fallback and web `reactionForAction`.
 
 Mark:
 
@@ -2713,6 +2713,13 @@ Rules:
 * Do not put message text in event payloads (privacy, scope §131).
 * Recent Events context (Task 6.3) may include `PET_TALKED`; it must not include `PERSONALITY_CHANGED` (personality reaches AI only through prompt profile).
 * Existing recap UI must ignore new event types it does not render.
+
+As implemented (Unit 07):
+
+* `PERSONALITY_CHANGED` is emitted generically by `PetService.mutate` whenever stored traits change (button Play/Feed, chat, autonomous Independent), with per-trait `previous` / `next` / `appliedDelta`. Not emitted for first initialization.
+* **Both new events are excluded from the player `PetSnapshot.recentEvents`**: personality values are debug-only (DEC-043) and classification is internal (scope §55). They remain in the event log for debugging.
+* Care-action events from chat carry `turnMessageId`.
+* `PET_TALKED` is not added to the AI context events (the conversation itself already shows it).
 
 ---
 

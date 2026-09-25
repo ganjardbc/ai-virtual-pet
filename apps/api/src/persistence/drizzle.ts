@@ -9,7 +9,7 @@ import {
   type PetId,
   type PetState,
 } from '@ai-virtual-pet/domain';
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, notInArray, sql } from 'drizzle-orm';
 
 import type { Database } from '../db/client.js';
 import { conversations, events, messages, petPersonalities, pets, petStates } from '../db/schema.js';
@@ -130,7 +130,12 @@ export class DrizzleEventRepository implements EventRepository {
     const rows = await this.db
       .select()
       .from(events)
-      .where(eq(events.petId, petId))
+      .where(
+        and(
+          eq(events.petId, petId),
+          query.excludeTypes?.length ? notInArray(events.type, [...query.excludeTypes]) : undefined,
+        ),
+      )
       .orderBy(desc(events.occurredAt), desc(events.id))
       .limit(query.limit);
 
@@ -145,6 +150,26 @@ export class DrizzleEventRepository implements EventRepository {
       .orderBy(asc(events.occurredAt), asc(events.id));
 
     return rows.map((row) => row.occurredAt);
+  }
+
+  async listSince(petId: PetId, type: DomainEventType, since: Date): Promise<StoredEvent[]> {
+    const rows = await this.db
+      .select()
+      .from(events)
+      .where(and(eq(events.petId, petId), eq(events.type, type), gte(events.occurredAt, since)))
+      .orderBy(asc(events.occurredAt), asc(events.id));
+
+    return rows.map(toStoredEvent);
+  }
+
+  async listForTurn(petId: PetId, turnMessageId: number): Promise<StoredEvent[]> {
+    const rows = await this.db
+      .select()
+      .from(events)
+      .where(and(eq(events.petId, petId), sql`(${events.data} ->> 'turnMessageId')::bigint = ${turnMessageId}`))
+      .orderBy(asc(events.id));
+
+    return rows.map(toStoredEvent);
   }
 }
 

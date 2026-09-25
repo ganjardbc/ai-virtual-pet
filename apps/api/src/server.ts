@@ -18,7 +18,8 @@ if (debugEnabled && process.env.NODE_ENV === 'production') {
 }
 
 // An invalid AI setting stops startup; missing credentials only disable Talk (plan Task 4.2).
-const ai = createAIProvider(loadAIConfig(process.env));
+const aiConfig = loadAIConfig(process.env);
+const ai = createAIProvider(aiConfig);
 
 const database = createDatabase(requireEnv('DATABASE_URL'));
 const pets = new DrizzlePetRepository(database.db);
@@ -44,6 +45,8 @@ const app = buildApp({
   pets,
   events,
   conversations,
+  ai,
+  aiTimeouts: aiConfig.timeouts,
   clock: debugClock ?? new SystemClock(),
   random: new SystemRandom(),
   logger: true,

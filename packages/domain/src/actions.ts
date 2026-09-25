@@ -191,3 +191,47 @@ export function wakePet(state: PetState, occurredAt: Date): ActionResult {
     effectMultiplier: 1,
   };
 }
+
+export interface TalkInput {
+  /** Talk Bond already gained during `occurredAt`'s UTC day (sum of today's PET_TALKED deltas). */
+  readonly bondGainedToday: number;
+  /** Conversation classification, recorded for debugging and future growth signals. */
+  readonly classification: string;
+}
+
+export interface TalkResult {
+  readonly state: PetState;
+  readonly bondDelta: number;
+  readonly events: readonly DomainEvent[];
+}
+
+/**
+ * A meaningful Talk turn (plan Task 7.8). The caller decides "meaningful"; the rule here only
+ * grants a small Bond gain within the daily cap. A sleeping pet cannot talk, so nothing changes.
+ */
+export function applyTalk(
+  state: PetState,
+  occurredAt: Date,
+  input: TalkInput,
+  rules: GameRules = DEFAULT_GAME_RULES,
+): TalkResult {
+  const now = requireValidDate(occurredAt, 'occurredAt');
+
+  if (state.currentActivity === 'SLEEPING') {
+    return { state, bondDelta: 0, events: [] };
+  }
+
+  const remaining = Math.max(0, rules.talk.maxBondPerDay - input.bondGainedToday);
+  const nextState: PetState = {
+    ...state,
+    bond: clampStat(state.bond + Math.min(rules.talk.bond, remaining)),
+    lastInteractionAt: now,
+  };
+  const bondDelta = Math.round((nextState.bond - state.bond) * 1e6) / 1e6;
+
+  return {
+    state: nextState,
+    bondDelta,
+    events: [createDomainEvent('PET_TALKED', now, { bondDelta, classification: input.classification })],
+  };
+}

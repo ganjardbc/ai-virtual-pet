@@ -102,7 +102,7 @@ export class InMemoryStore implements PetRepository, EventRepository, Conversati
 
   async listRecent(petId: PetId, query: EventQuery): Promise<StoredEvent[]> {
     return this.eventLog
-      .filter((event) => event.petId === petId)
+      .filter((event) => event.petId === petId && !query.excludeTypes?.includes(event.type))
       .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id - a.id)
       .slice(0, query.limit)
       .map((event) => structuredClone(event));
@@ -113,6 +113,20 @@ export class InMemoryStore implements PetRepository, EventRepository, Conversati
       .filter((event) => event.petId === petId && event.type === type && event.occurredAt >= since)
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id - b.id)
       .map((event) => new Date(event.occurredAt));
+  }
+
+  async listSince(petId: PetId, type: DomainEventType, since: Date): Promise<StoredEvent[]> {
+    return this.eventLog
+      .filter((event) => event.petId === petId && event.type === type && event.occurredAt >= since)
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id - b.id)
+      .map((event) => structuredClone(event));
+  }
+
+  async listForTurn(petId: PetId, turnMessageId: number): Promise<StoredEvent[]> {
+    return this.eventLog
+      .filter((event) => event.petId === petId && event.payload.turnMessageId === turnMessageId)
+      .sort((a, b) => a.id - b.id)
+      .map((event) => structuredClone(event));
   }
 
   async findForPet(petId: PetId): Promise<Conversation | null> {

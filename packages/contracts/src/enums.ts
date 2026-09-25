@@ -43,5 +43,7 @@ export const petEventTypeSchema = z.enum([
   'PET_ACTIVITY_CHANGED',
   'ACTION_REJECTED',
   'DEBUG_STATE_CHANGED',
+  'PET_TALKED',
+  'PERSONALITY_CHANGED',
 ]);
 export type PetEventType = z.infer<typeof petEventTypeSchema>;

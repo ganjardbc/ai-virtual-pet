@@ -49,6 +49,8 @@ export interface PetRepository {
 
 export interface EventQuery {
   readonly limit: number;
+  /** Event types to leave out (e.g. debug-only events from the player snapshot). */
+  readonly excludeTypes?: readonly DomainEventType[];
 }
 
 export interface EventRepository {
@@ -56,6 +58,10 @@ export interface EventRepository {
   listRecent(petId: PetId, query: EventQuery): Promise<StoredEvent[]>;
   /** Occurrence times of one event type at or after `since`, oldest first (e.g. Play diminishing). */
   listOccurrenceTimes(petId: PetId, type: DomainEventType, since: Date): Promise<Date[]>;
+  /** Events of one type at or after `since`, oldest first (e.g. today's Talk Bond). */
+  listSince(petId: PetId, type: DomainEventType, since: Date): Promise<StoredEvent[]>;
+  /** Events recorded for one chat turn (payload `turnMessageId`), oldest first — turn idempotency. */
+  listForTurn(petId: PetId, turnMessageId: number): Promise<StoredEvent[]>;
 }
 
 export class ConcurrencyError extends Error {

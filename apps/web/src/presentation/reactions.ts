@@ -1,4 +1,9 @@
-import type { ActionResult, PetSnapshot } from '@ai-virtual-pet/contracts';
+import {
+  ACTION_REACTION_TEXT,
+  actionReactionKind,
+  type ActionResult,
+  type PetSnapshot,
+} from '@ai-virtual-pet/contracts';
 
 import { activityText } from './copy';
 import type { PetVisual } from './visual';
@@ -11,41 +16,30 @@ export interface Reaction {
   readonly visual?: PetVisual;
 }
 
-/** Below this, a successful Feed was the diminished near-full kind. */
-const HEARTY_MEAL_MIN_FULLNESS_GAIN = 20;
-/** Below this, Play was heavily diminished by repetition. */
-const FULL_FUN_MIN_HAPPINESS_GAIN = 6;
-
 const speech = (text: string, visual?: PetVisual): Reaction =>
   visual ? { kind: 'speech', text, visual } : { kind: 'speech', text };
 
 /** The pet's immediate response to a care action, derived only from the server's result. */
+// Words come from the shared table so chat fallbacks sound the same; the look is web-only.
+const REACTION_VISUAL: Readonly<Record<Exclude<ReturnType<typeof actionReactionKind>, 'SLEEPING'>, PetVisual>> = {
+  HEARTY_MEAL: { expression: 'eating', pose: 'center', motion: 'chew' },
+  LIGHT_MEAL: { expression: 'content', pose: 'center', motion: 'chew' },
+  FULL_FUN: { expression: 'excited', pose: 'toy', motion: 'bounce' },
+  LIGHT_FUN: { expression: 'happy', pose: 'toy', motion: 'breathe' },
+  GOOD_NIGHT: { expression: 'sleeping', pose: 'bed', motion: 'slow' },
+  TOO_TIRED: { expression: 'tired', pose: 'center', motion: 'slow' },
+  TOO_FULL: { expression: 'content', pose: 'center', motion: 'shake' },
+  INVALID_STATE: { expression: 'curious', pose: 'center', motion: 'breathe' },
+};
+
 export function reactionForAction(result: ActionResult): Reaction {
-  if (result.status === 'REJECTED') {
-    switch (result.reason) {
-      case 'TOO_TIRED':
-        return speech('Aku capek banget…', { expression: 'tired', pose: 'center', motion: 'slow' });
-      case 'TOO_FULL':
-        return speech('Aku udah kenyang…', { expression: 'content', pose: 'center', motion: 'shake' });
-      case 'SLEEPING':
-        return { kind: 'narration', text: activityText.SLEEPING ?? '' };
-      case 'INVALID_STATE':
-        return speech('Hmm?', { expression: 'curious', pose: 'center', motion: 'breathe' });
-    }
+  const kind = actionReactionKind(result);
+
+  if (kind === 'SLEEPING') {
+    return { kind: 'narration', text: activityText.SLEEPING ?? '' };
   }
 
-  switch (result.action.type) {
-    case 'FEED':
-      return result.changes.hunger >= HEARTY_MEAL_MIN_FULLNESS_GAIN
-        ? speech('Nyam!', { expression: 'eating', pose: 'center', motion: 'chew' })
-        : speech('Udah mulai kenyang…', { expression: 'content', pose: 'center', motion: 'chew' });
-    case 'PLAY':
-      return result.changes.happiness >= FULL_FUN_MIN_HAPPINESS_GAIN
-        ? speech('Lagi! Lagi!', { expression: 'excited', pose: 'toy', motion: 'bounce' })
-        : speech('Seru juga.', { expression: 'happy', pose: 'toy', motion: 'breathe' });
-    case 'SLEEP':
-      return speech('Selamat tidur…', { expression: 'sleeping', pose: 'bed', motion: 'slow' });
-  }
+  return speech(ACTION_REACTION_TEXT[kind], REACTION_VISUAL[kind]);
 }
 
 /** What the pet expresses when nothing just happened: important needs first, then activity, then mood. */
